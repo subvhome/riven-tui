@@ -736,7 +736,7 @@ class RivenTUI(App):
         if hasattr(self, "api"):
             await self.api.shutdown()
 
-    def watch_app_state(self, new_state: Literal["welcome", "search", "library"]) -> None:
+    def watch_app_state(self, new_state: Literal["welcome", "search", "library", "calendar"]) -> None:
         """Called when app_state changes to update UI visibility."""
         welcome_message = self.query_one("#welcome-message")
         search_subheader = self.query_one("#search-subheader")
@@ -744,6 +744,7 @@ class RivenTUI(App):
         sidebar = self.query_one(Sidebar)
         main_content = self.query_one(MainContent)
         search_input = self.query_one("#search-input")
+        pagination_slot = self.query_one("#pagination-slot")
 
         # Hide everything initially
         welcome_message.display = False
@@ -751,6 +752,7 @@ class RivenTUI(App):
         main_area.display = False
         sidebar.display = False
         main_content.display = False
+        pagination_slot.display = False
         
         # Hide all sidebar sub-containers
         sidebar.query_one("#sidebar-list-container").display = False
@@ -765,11 +767,15 @@ class RivenTUI(App):
             sidebar.display = True # Sidebar shows search results
             main_content.display = True # Main content shows selected item details
             search_input.focus()
+            # Clear previous content (like library cards)
+            main_content.query_one("#main-content-container").remove_children()
+            main_content.query_one("#main-content-title").display = False
         elif new_state == "library":
             search_subheader.display = False # Hide search bar in library view
             main_area.display = True
             sidebar.display = True # Sidebar can be used for library filters/categories later
             main_content.display = True # Main content shows library items
+            pagination_slot.display = True
         elif new_state == "calendar":
             search_subheader.display = False
             main_area.display = True

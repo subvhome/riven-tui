@@ -2,6 +2,14 @@
 
 A modern, terminal-based user interface for managing your **Riven** library. Built with Python and the Textual framework.
 
+## 📸 Screenshots
+
+| Search & Results | Library View |
+| :---: | :---: |
+| ![Search](assets/tui-1.jpg) | ![Library](assets/tui-2.jpg) |
+| **Calendar View** | **Item Details & Actions** |
+| ![Calendar](assets/tui-3.jpg) | ![Details](assets/tui-4.jpg) |
+
 ## 🚀 Features
 
 -   **Library Browsing:** View and filter your existing movies and TV shows.
