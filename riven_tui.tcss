@@ -329,6 +329,32 @@ ListItem {
     padding: 1;
 }
 
+#chafa-check-container {
+    align: center middle;
+}
+
+#chafa-check-title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+    color: #F4D35E;
+}
+
+#chafa-check-message {
+    margin: 1 2;
+    text-align: center;
+}
+
+#chafa-check-buttons {
+    height: 3;
+    align: center middle;
+    margin-top: 1;
+}
+
+#chafa-check-buttons Button {
+    margin: 0 2;
+}
+
 .scrollable-container {
     height: 1fr;
     overflow-y: scroll;

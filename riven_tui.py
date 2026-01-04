@@ -210,6 +210,35 @@ class FileMappingScreen(ModalScreen[dict]):
             self.dismiss(None)
 
 
+class ChafaCheckScreen(ModalScreen[bool]):
+    """A modal screen to warn about missing chafa and provide a solution."""
+    def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
+        super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="chafa-check-container", classes="modal-popup"):
+            yield Static("⚠️ Chafa Not Found", id="chafa-check-title")
+            yield Static(
+                "The [bold]chafa[/bold] command is required to display posters.\n"
+                "Without it, the image feature will be disabled.\n\n"
+                "To install it on Ubuntu/Debian, run:\n"
+                "[bold cyan]sudo apt update && sudo apt install chafa[/bold cyan]\n\n"
+                "Do you want to continue without images?",
+                id="chafa-check-message"
+            )
+            with Horizontal(id="chafa-check-buttons"):
+                yield Button("Continue", id="btn-chafa-continue", variant="primary")
+                yield Button("Exit", id="btn-chafa-exit", variant="error")
+
+    @on(Button.Pressed, "#btn-chafa-continue")
+    def on_continue(self) -> None:
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#btn-chafa-exit")
+    def on_exit(self) -> None:
+        self.dismiss(False)
+
+
 class TitleSpinner:
     """Manages a spinning animation in the app title."""
     SPINNER_FRAMES = ['⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷']
@@ -717,7 +746,17 @@ class RivenTUI(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self.log_message("App mounted. Initializing API.")
+        self.log_message("App mounted. Starting startup worker.")
+        self.run_worker(self.perform_startup())
+
+    async def perform_startup(self) -> None:
+        """Performs startup checks and initializes the API in a worker."""
+        # Check for Chafa and prompt user if missing
+        if not self.chafa_available:
+            if not await self.push_screen_wait(ChafaCheckScreen()):
+                self.exit()
+                return
+
         # Set initial app state to welcome
         self.app_state = "welcome" 
         try:
