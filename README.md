@@ -1,4 +1,4 @@
-# Riven TUI
+# A Riven TUI
 
 A modern, terminal-based user interface for managing your **Riven** library. Built with Python and the Textual framework.
 
