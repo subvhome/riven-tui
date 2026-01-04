@@ -4,10 +4,10 @@ A modern, terminal-based user interface for managing your **Riven** library. Bui
 
 ## 📸 Screenshots
 
-| Search & Results | Library View |
+| Main Application | Search View |
 | :---: | :---: |
 | ![Search](assets/tui-1.jpg) | ![Library](assets/tui-2.jpg) |
-| **Calendar View** | **Item Details & Actions** |
+| **Library View** | **Calendar** |
 | ![Calendar](assets/tui-3.jpg) | ![Details](assets/tui-4.jpg) |
 
 ## 🚀 Features
