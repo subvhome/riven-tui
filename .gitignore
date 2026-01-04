@@ -1,0 +1,13 @@
+# Secrets
+settings.json
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+
+# Tooling
+.geminiignore
