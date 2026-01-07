@@ -31,7 +31,7 @@ A modern, terminal-based user interface for managing your **Riven** library. Bui
 
 1.  **Clone the repository:**
     ```bash
-    git clone git@github.com:YOUR_USERNAME/riven-tui.git
+    git clone https://github.com/subvhome/riven-tui.git
     cd riven-tui
     ```
 
