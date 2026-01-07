@@ -16,6 +16,7 @@ A modern, terminal-based user interface for managing your **Riven** library. Bui
 -   **TMDB Integration:** Search for new content directly from TMDB.
 -   **Manual Scraping:** Robust flow for discovering streams, selecting torrents, and mapping files to seasons/episodes.
 -   **Release Calendar:** A monthly view of released and upcoming content with category filters.
+-   **Settings Management:** Dynamically generated configuration interface driven by the Riven backend schema. Support for nested structures, dropdowns, and multi-line list editing.
 -   **Poster Art:** High-quality terminal image rendering using `chafa`.
 -   **Live Logs:** View and refresh Riven backend logs directly within the app.
 
@@ -42,7 +43,7 @@ A modern, terminal-based user interface for managing your **Riven** library. Bui
 
 3.  **Install dependencies:**
     ```bash
-    pip install textual httpx rich
+    pip install -r requirements.txt
     ```
 
 ## ⚙️ Configuration
@@ -69,6 +70,7 @@ python riven_tui.py
 -   **Search:** Use the header button to search TMDB.
 -   **Library:** Filter and browse your Riven collection.
 -   **Calendar:** View releases by month; use the sidebar to jump to specific dates.
+-   **Settings:** Access and modify your Riven configuration with partial update support.
 
 ## 📜 License
 
