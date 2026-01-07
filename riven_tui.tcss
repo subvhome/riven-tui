@@ -627,6 +627,147 @@ ListItem {
     text-style: bold underline;
 }
 
+/* Settings View Styles */
+#settings-container {
+    height: 1fr;
+    width: 100%;
+}
 
+#settings-sidebar {
+    width: 30;
+    height: 100%;
+    background: #1A1A2E;
+    border-right: tall #3D5A80;
+}
 
+#settings-sidebar-title {
+    text-align: center;
+    background: #1A1A2E;
+    color: #F0F0F0;
+    padding: 1;
+    text-style: bold;
+    border-bottom: solid #3D5A80;
+}
 
+#settings-tree {
+    background: #1A1A2E;
+    padding: 1;
+}
+
+#settings-content {
+    width: 1fr;
+    height: 100%;
+    padding: 2;
+    background: #1A1A2E;
+}
+
+#settings-content-title {
+    text-style: bold underline;
+    color: #BE95C4;
+    margin-bottom: 2;
+    text-align: left;
+}
+
+#settings-form-container {
+    height: 1fr;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+#settings-actions {
+    height: 3;
+    margin-top: 1;
+    align: right middle;
+    border-top: solid #3D5A80;
+    padding-top: 1;
+}
+
+#btn-save-settings {
+    margin-right: 1;
+}
+
+.setting-field-v {
+    height: auto;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+.setting-row {
+    height: auto;
+    min-height: 3;
+    align: left middle;
+}
+
+.setting-label {
+    width: 40;
+    color: #F0F0F0;
+    text-style: bold;
+    padding-right: 2;
+}
+
+.setting-field-v Input {
+    width: 1fr;
+    background: #2C3E50;
+    border: none;
+    height: 1;
+}
+
+.setting-field-v Select {
+    width: 1fr;
+    height: 1;
+    border: none;
+    background: #2C3E50;
+    padding: 0;
+    margin: 0;
+}
+
+/* This is the inner container showing the value */
+.setting-field-v SelectCurrent {
+    border: none;
+    background: #2C3E50;
+    color: #F0F0F0;
+    height: 3;
+}
+
+.setting-field-v SelectCurrent:hover {
+    background: #3D5A80;
+}
+
+/* Remove any background from the label/icon inside SelectCurrent */
+.setting-field-v SelectCurrent Static {
+    background: transparent;
+}
+
+/* Style the actual dropdown list that appears when clicked */
+.setting-field-v SelectOverlay {
+    background: #2C3E50;
+    border: solid #3D5A80;
+}
+
+.setting-field-v Select:focus > SelectCurrent {
+    background: #3D5A80;
+}
+
+.setting-field-v TextArea {
+    width: 1fr;
+    background: #2C3E50;
+    border: none;
+    height: 5;
+    margin-bottom: 1;
+}
+
+.setting-field-v Switch {
+    background: transparent;
+}
+
+.setting-description {
+    color: #888;
+    margin-bottom: 1;
+    height: auto;
+}
+
+.no-fields-label {
+    text-align: center;
+    color: #666;
+    margin-top: 2;
+}
