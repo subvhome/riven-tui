@@ -21,12 +21,12 @@ import rich.markup
 from rich.markup import escape
 
 from api import RivenAPI
+from settings_view import SettingsView
 import subprocess
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
 
 class ScrapeLogScreen(ModalScreen):
-    """A modal screen to display live scraping logs."""
     def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
 
@@ -44,7 +44,6 @@ class ScrapeLogScreen(ModalScreen):
         self.app.pop_screen()
 
 class StreamSelectionScreen(ModalScreen[str]):
-    """A modal screen to select a stream."""
     def __init__(self, streams: List[dict], name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
         self.streams = streams
@@ -92,7 +91,6 @@ class StreamSelectionScreen(ModalScreen[str]):
         self.dismiss(None)
 
 class FileMappingScreen(ModalScreen[dict]):
-    """A modal screen for mapping files to seasons and episodes."""
 
     def __init__(self, files: List[dict], parsed_data: List[dict], title: str, session_id: str, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
@@ -211,7 +209,6 @@ class FileMappingScreen(ModalScreen[dict]):
 
 
 class ChafaCheckScreen(ModalScreen[bool]):
-    """A modal screen to warn about missing chafa and provide a solution."""
     def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
 
@@ -240,7 +237,6 @@ class ChafaCheckScreen(ModalScreen[bool]):
 
 
 class TitleSpinner:
-    """Manages a spinning animation in the app title."""
     SPINNER_FRAMES = ['⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷']
     DEFAULT_INTERVAL = 0.1
 
@@ -252,7 +248,6 @@ class TitleSpinner:
         self.title_widget = self.app.query_one("#header-title", Static)
 
     async def start(self, message: str = "Loading...", interval: float = DEFAULT_INTERVAL):
-        """Starts the spinner animation."""
         self.stop()
         self._frame_index = 0
         self.message = message
@@ -262,14 +257,12 @@ class TitleSpinner:
         self.title_widget.update(f"{self.base_title} - {self.message} {self.SPINNER_FRAMES[self._frame_index]}")
 
     def stop(self):
-        """Stops the spinner animation and resets the title."""
         if self._spinner_task:
             self._spinner_task.stop()
             self._spinner_task = None
         self.title_widget.update(self.base_title)
 
     def _update_spinner(self):
-        """Updates the spinner frame."""
         self._frame_index = (self._frame_index + 1) % len(self.SPINNER_FRAMES)
         self.title_widget.update(f"{self.base_title} - {self.message} {self.SPINNER_FRAMES[self._frame_index]}")
 
@@ -280,7 +273,6 @@ class SearchSubmitted(Message):
         self.query = query
 
 class RefreshPoster(Message):
-    """Message to request a poster refresh."""
     pass
 
 class SearchArea(Container):
@@ -338,7 +330,6 @@ class MonthChanged(Message):
         super().__init__()
 
 class FilterPill(Static):
-    """A custom widget that acts like a toggle pill without brackets or X."""
     class Changed(Message):
         def __init__(self, filter_type: str, value: bool) -> None:
             self.filter_type = filter_type
@@ -366,7 +357,6 @@ class CalendarItemCard(Horizontal):
 
     def compose(self) -> ComposeResult:
         i_type = self.item_data.get("item_type", "unknown")
-        # Icons matching mockup
         icon = "📺" 
         color = "#3498DB" # Default blue
         if i_type == "movie": 
@@ -425,11 +415,9 @@ class CalendarHeader(Horizontal):
 class Sidebar(Container):
     def compose(self) -> ComposeResult:
         yield Static("Main Menu", id="sidebar-title")
-        # Container for list based content (Categories, Search Results)
         with Vertical(id="sidebar-list-container"):
             yield ListView(id="sidebar-list")
         
-        # Container for Library Filters
         with Vertical(id="sidebar-filters-container"):
             with Vertical(classes="filter-scroll-area"):
                 yield Label("Search:")
@@ -479,7 +467,6 @@ class Sidebar(Container):
 
             yield Button("Apply Filters", id="btn-apply-filters", variant="success")
 
-        # Container for Calendar Sidebar
         with Vertical(id="sidebar-calendar-container"):
             yield Static("MONTHLY STATS", classes="sidebar-subtitle")
             yield Static("", id="calendar-sidebar-stats")
@@ -498,7 +485,6 @@ class Sidebar(Container):
             
             yield Static("_" * 38, classes="sidebar-separator")
             with Vertical(id="calendar-grid-container"):
-                # Grid will be mounted here dynamically
                 pass
 
     def on_mount(self) -> None:
@@ -526,7 +512,6 @@ class Sidebar(Container):
         self.query_one("#sidebar-calendar-container").display = True
 
     async def update_calendar_sidebar(self, year: int, month: int, monthly_items: List[dict], active_filters: Dict[str, bool]) -> None:
-        # 1. Update Stats
         m_count = len([i for i in monthly_items if i.get("item_type") == "movie"])
         e_count = len([i for i in monthly_items if i.get("item_type") == "episode"])
         s_count = len([i for i in monthly_items if i.get("item_type") == "show"])
@@ -541,27 +526,19 @@ class Sidebar(Container):
         )
         self.query_one("#calendar-sidebar-stats").update(stats_text)
 
-        # 2. Update Year/Month Labels
         self.query_one("#label-year-sidebar").update(str(year))
         self.query_one("#label-month-sidebar").update(calendar.month_name[month])
 
-        # 3. Generate Grid
         grid_container = self.query_one("#calendar-grid-container")
         await grid_container.query("*").remove()
         
-        # Days header
         header_row = Horizontal(classes="calendar-grid-row calendar-grid-header")
         await grid_container.mount(header_row)
         for day_name in ["S", "M", "T", "W", "T", "F", "S"]:
             await header_row.mount(Label(day_name, classes="grid-cell grid-header-cell"))
 
-        # Calendar matrix
-        # calendar.monthcalendar uses Mon=0 by default. Let's stick to it or adjust for Sun start.
-        # Riven mockup shows Thu, Jan 1. 2026 starts on Thu.
-        # calendar.setfirstweekday(calendar.SUNDAY)
         cal_matrix = calendar.monthcalendar(year, month)
         
-        # Dates with content for highlighting
         content_days = {i["_dt"].day for i in monthly_items if "_dt" in i}
 
         for week in cal_matrix:
@@ -578,9 +555,6 @@ class Sidebar(Container):
 
     @on(Button.Pressed, ".jumper-btn")
     def on_jumper_button(self, event: Button.Pressed) -> None:
-        # Determine what to change based on button ID
-        # Since Sidebar doesn't have the date state, we notify the App
-        # or just handle it here if we assume App will react to MonthChanged
         pass
 
     def update_results(self, query: str, results: List[dict]) -> None:
@@ -668,7 +642,7 @@ class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
 
     base_title = reactive("Riven TUI") 
-    app_state: Literal["welcome", "search", "library", "calendar"] = reactive("welcome")
+    app_state: Literal["welcome", "search", "library", "calendar", "settings"] = reactive("welcome")
     current_calendar_date = reactive(datetime.now())
     calendar_filters = reactive({"movie": True, "episode": True, "show": True, "season": True})
 
@@ -688,8 +662,8 @@ class RivenTUI(App):
         self._clear_notification_timer = None
         self.refresh_delay_seconds = 3.0
         self.last_library_filters = {}
-        self.library_cache: List[dict] = [] # Cache for full library items
-        self.calendar_cache: List[dict] = [] # Cache for calendar items
+        self.library_cache: List[dict] = [] 
+        self.calendar_cache: List[dict] = [] 
 
     def log_message(self, message: str):
         if self.settings.get("tui_debug"):
@@ -724,10 +698,11 @@ class RivenTUI(App):
         
     def compose(self) -> ComposeResult:
         with Horizontal(id="header-bar"):
-            yield Button("⭘ Search", id="btn-header-search")
+            yield Button("Search", id="btn-header-search")
             yield Button("Library", id="btn-header-library")
             yield Button("Discover", id="btn-header-discover", disabled=True)
             yield Button("Calendar", id="btn-header-calendar")
+            yield Button("Settings", id="btn-header-settings")
             yield Static(self.base_title, id="header-title")
 
         yield SearchArea(id="search-subheader")
@@ -738,7 +713,9 @@ class RivenTUI(App):
                 yield Sidebar(id="sidebar")
                 with Vertical(id="content-wrapper"):
                     yield MainContent(id="content-area")
-                    yield Container(id="pagination-slot") # Placeholder for pagination
+                    yield Container(id="pagination-slot") 
+            
+            yield SettingsView(id="settings-view")
 
         if self.settings.get("tui_debug"):
             yield Log(id="debug-log", highlight=True)
@@ -750,14 +727,11 @@ class RivenTUI(App):
         self.run_worker(self.perform_startup())
 
     async def perform_startup(self) -> None:
-        """Performs startup checks and initializes the API in a worker."""
-        # Check for Chafa and prompt user if missing
         if not self.chafa_available:
             if not await self.push_screen_wait(ChafaCheckScreen()):
                 self.exit()
                 return
 
-        # Set initial app state to welcome
         self.app_state = "welcome" 
         try:
             be_url = self.build_url("be_config")
@@ -771,12 +745,10 @@ class RivenTUI(App):
             self.notify(f"Config Error: {e}", severity="error")
 
     async def on_unmount(self) -> None:
-        """Called when the app is shutting down."""
         if hasattr(self, "api"):
             await self.api.shutdown()
 
-    def watch_app_state(self, new_state: Literal["welcome", "search", "library", "calendar"]) -> None:
-        """Called when app_state changes to update UI visibility."""
+    def watch_app_state(self, new_state: Literal["welcome", "search", "library", "calendar", "settings"]) -> None:
         welcome_message = self.query_one("#welcome-message")
         search_subheader = self.query_one("#search-subheader")
         main_area = self.query_one("#main-area")
@@ -784,16 +756,16 @@ class RivenTUI(App):
         main_content = self.query_one(MainContent)
         search_input = self.query_one("#search-input")
         pagination_slot = self.query_one("#pagination-slot")
+        settings_view = self.query_one(SettingsView)
 
-        # Hide everything initially
         welcome_message.display = False
         search_subheader.display = False
         main_area.display = False
         sidebar.display = False
         main_content.display = False
         pagination_slot.display = False
+        settings_view.display = False
         
-        # Hide all sidebar sub-containers
         sidebar.query_one("#sidebar-list-container").display = False
         sidebar.query_one("#sidebar-filters-container").display = False
         sidebar.query_one("#sidebar-calendar-container").display = False
@@ -803,52 +775,54 @@ class RivenTUI(App):
         elif new_state == "search":
             search_subheader.display = True
             main_area.display = True
-            sidebar.display = True # Sidebar shows search results
-            main_content.display = True # Main content shows selected item details
+            sidebar.display = True 
+            main_content.display = True 
             search_input.focus()
-            # Clear previous content (like library cards)
             main_content.query_one("#main-content-container").remove_children()
             main_content.query_one("#main-content-title").display = False
         elif new_state == "library":
-            search_subheader.display = False # Hide search bar in library view
+            search_subheader.display = False 
             main_area.display = True
-            sidebar.display = True # Sidebar can be used for library filters/categories later
-            main_content.display = True # Main content shows library items
+            sidebar.display = True 
+            main_content.display = True 
             pagination_slot.display = True
         elif new_state == "calendar":
             search_subheader.display = False
             main_area.display = True
-            sidebar.display = True # We can use sidebar for calendar summary
+            sidebar.display = True 
             sidebar.show_calendar_summary()
             main_content.display = True
+        elif new_state == "settings":
+            settings_view.display = True
+            if not settings_view.settings_data:
+                settings_view.post_message(Button.Pressed(settings_view.query_one("#btn-refresh-settings")))
 
     @on(Button.Pressed, "#btn-header-search")
     def on_search_button_pressed(self) -> None: 
-        """Show the search interface."""
         self.app_state = "search"
 
     @on(Button.Pressed, "#btn-header-library")
     async def on_library_button_pressed(self) -> None: 
-        """Show the library items."""
         self.log_message("Library button pressed.")
-        self.app_state = "library" # Set app state to library
+        self.app_state = "library" 
         
-        # Show filters in sidebar
         sidebar = self.query_one(Sidebar)
         sidebar.show_library_filters()
         
-        # Initial bulk fetch and display
         await self.show_library_items(refresh_cache=True)
 
     @on(Button.Pressed, "#btn-header-calendar")
     async def on_calendar_button_pressed(self) -> None:
-        """Show the calendar."""
         self.log_message("Calendar button pressed.")
         self.app_state = "calendar"
         await self.show_calendar(refresh_cache=True)
 
+    @on(Button.Pressed, "#btn-header-settings")
+    def on_settings_button_pressed(self) -> None:
+        self.log_message("Settings button pressed.")
+        self.app_state = "settings"
+
     def watch_base_title(self, new_title: str) -> None: 
-        """Called when base_title changes."""
         if self.spinner is not None:
             self.spinner.base_title = new_title
             if not self.spinner._spinner_task:
@@ -860,12 +834,10 @@ class RivenTUI(App):
                 pass
 
     def _reset_base_title(self) -> None:
-        """Resets the base_title to its default value."""
         self.base_title = "Riven TUI"
         self._clear_notification_timer = None
 
     async def start_spinner(self, message: str = "Loading...", interval: float = TitleSpinner.DEFAULT_INTERVAL):
-        """Helper to start the app's title spinner."""
         if self._clear_notification_timer:
             self._clear_notification_timer.stop()
             self._clear_notification_timer = None
@@ -873,36 +845,28 @@ class RivenTUI(App):
             await self.spinner.start(message, interval)
 
     def stop_spinner(self):
-        """Helper to stop the app's title spinner."""
         if self.spinner is not None:
             self.spinner.stop()
 
     async def on_resize(self, event) -> None: 
-        # Check if a poster is currently displayed and needs resizing
         main_content = self.query_one(MainContent)
         try:
-            # Check if the poster-display static widget exists
             _ = main_content.query_one("#poster-display", Static)
-            # If it exists, it means we are currently showing an item with a poster
             self.log_message("Resize detected while poster visible. Debouncing poster refresh.")
             if self.post_message_debounce_timer:
                 self.post_message_debounce_timer.stop()
             self.post_message_debounce_timer = self.set_timer(0.2, lambda: self.post_message(RefreshPoster()))
         except NoMatches:
-            # No poster displayed, no need to re-render
             pass
 
     async def on_refresh_poster(self, message: RefreshPoster) -> None: 
         main_content = self.query_one(MainContent)
-        # Only re-render if a poster is actually displayed
         try:
             _ = main_content.query_one("#poster-display", Static)
         except NoMatches:
-            return # No poster to refresh
+            return 
 
         current_main_content_width = main_content.size.width
-        # Re-render if width has changed significantly (e.g., by more than 2 chars)
-        # or if it's the first time rendering Chafa
         if (
             main_content.last_chafa_width is None
             or abs(current_main_content_width - main_content.last_chafa_width) > 2
@@ -916,13 +880,13 @@ class RivenTUI(App):
     async def handle_search(self, message: SearchSubmitted):
         self.log_message(f"Handling TMDB search for: '{message.query}'")
         
-        self.app_state = "search" # Set app state to search
+        self.app_state = "search" 
         sidebar = self.query_one(Sidebar)
-        sidebar.query_one(ListView).clear() # Clear existing sidebar content
+        sidebar.query_one(ListView).clear() 
 
         main_content = self.query_one(MainContent)
         container = main_content.query_one("#main-content-container")
-        await container.query("*").remove() # Clear previous content
+        await container.query("*").remove() 
         main_content.query_one("#main-content-title").display = False
 
         await self.start_spinner(f"Searching for '{message.query}'")
@@ -943,21 +907,17 @@ class RivenTUI(App):
         self.log_message("Sidebar results updated.")
 
     async def _render_poster(self, container: Container, tmdb_data: dict):
-        """Renders the poster image using Chafa if available."""
         if self.chafa_available and tmdb_data.get("poster_path"):
             main_content = self.query_one(MainContent)
             poster_url = f"https://image.tmdb.org/t/p/w1280{tmdb_data['poster_path']}"
             
-            # Calculate width based on container, with a minimum
             main_content_width = main_content.size.width
             chafa_target_width = max(10, main_content_width - 6)
 
-            # Honor the max width setting
             chafa_max_width = self.settings.get("chafa_max_width", 0)
             if chafa_max_width > 0:
                 chafa_target_width = min(chafa_target_width, chafa_max_width)
             
-            # Fetch and display the poster
             poster_art, error = await self.api.get_poster_chafa(poster_url, width=chafa_target_width)
             if error:
                 self.log_message(f"Error getting poster: {error}")
@@ -971,11 +931,11 @@ class RivenTUI(App):
         container = main_content.query_one("#main-content-container")
         
         await container.query("*").remove()
-        main_content.last_chafa_width = None # Reset Chafa width tracker
+        main_content.last_chafa_width = None 
         
         tmdb_data = main_content.tmdb_details
         riven_data = main_content.item_details
-        search_item_data = main_content.item_data # Original data from search result
+        search_item_data = main_content.item_data 
 
         if not tmdb_data:
             self.notify("Missing TMDB details.", severity="error")
@@ -983,13 +943,13 @@ class RivenTUI(App):
 
         title = tmdb_data.get('title') or tmdb_data.get('name', 'N/A')
         year = (tmdb_data.get('release_date') or tmdb_data.get('first_air_date', 'N/A'))[:4]
-        runtime_movie = tmdb_data.get('runtime', 0) # For movies
+        runtime_movie = tmdb_data.get('runtime', 0) 
         
         episode_run_time = None
         if search_item_data and search_item_data.get("media_type") == "tv":
             episode_run_time_list = tmdb_data.get('episode_run_time', [])
             if episode_run_time_list:
-                episode_run_time = f"{episode_run_time_list[0]} mins" # Assuming average or first
+                episode_run_time = f"{episode_run_time_list[0]} mins" 
 
         languages_spoken_list = [lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
         if not languages_spoken_list and tmdb_data.get('original_language'):
@@ -1002,7 +962,6 @@ class RivenTUI(App):
         description = tmdb_data.get('overview')
         tagline = tmdb_data.get('tagline')
 
-        # 1. Riven Library Status
         if riven_data:
             title_widget.display = True
             title_widget.update(f"In Library (Riven ID: {riven_data.get('id')})")
@@ -1010,16 +969,12 @@ class RivenTUI(App):
             title_widget.display = True
             title_widget.update("Not in Library")
 
-        # --- NEW LAYOUT START ---
 
-        # 2. Main Title
         await container.mount(Static(f"[bold]{title}[/bold]", classes="media-title"))
         
-        # 3. Tagline
         if tagline:
             await container.mount(Static(f"[italic]{tagline}[/italic]", classes="media-tagline")),
 
-        # 4. Buttons
         action_buttons = []
         if riven_data:
             action_buttons.extend([
@@ -1028,23 +983,18 @@ class RivenTUI(App):
                 Button("Retry", id="btn-retry", variant="primary"),
             ])
         
-        # Manual Scrape and Add buttons
         action_buttons.append(Button("Manual Scrape", id="btn-manual-scrape", variant="success"))
         if not riven_data:
             action_buttons.append(Button("Add to Library", id="btn-add", variant="success"))
 
-        # Back to List button if in library mode
         if self.app_state == "library":
             action_buttons.append(Button("Back to List", id="btn-back-to-library", variant="primary"))
 
-        # TMDB JSON button
         action_buttons.append(Button("Print TMDB JSON", id="btn-print-json"))
         
-        # Mount buttons in a horizontal container
         if action_buttons:
             await container.mount(Horizontal(*action_buttons, classes="media-button-bar"))
 
-        # 5. Metadata Row (Year, Runtime, Languages, Status)
         metadata_items = [year]
         if search_item_data and search_item_data.get("media_type") == "movie" and runtime_movie:
             metadata_items.append(f"{runtime_movie} mins")
@@ -1058,21 +1008,16 @@ class RivenTUI(App):
         if metadata_items:
             await container.mount(Static(" * ".join(filter(None, metadata_items)), classes="media-metadata")),
 
-        # 6. Genres
         if genres:
             await container.mount(Static(f"Genres: {genres}", classes="media-genres")),
 
-        # 7. Overview
         if description:
             await container.mount(Static(description, classes="media-overview")),
 
-        # 8. Chafa Image (Poster)
         await self._render_poster(container, tmdb_data)
 
-        # --- NEW LAYOUT END ---
     @on(ListView.Selected, "#sidebar-list")
     async def on_list_view_selected(self, event: ListView.Selected) -> None: 
-        """Handle item selection from the sidebar."""
 
         main_content = self.query_one(MainContent)
         
@@ -1085,6 +1030,7 @@ class RivenTUI(App):
 
         if selected_item_label == "Settings":
             self.log_message("Settings selected.")
+            self.app_state = "settings"
             return
             
         if not (hasattr(event.item, "item_data") and event.item.item_data):
@@ -1096,11 +1042,6 @@ class RivenTUI(App):
         await self._refresh_current_item_data_and_ui(delay=0)
 
     async def _refresh_current_item_data_and_ui(self, delay: float | None = None) -> None:
-        """
-        Re-fetches TMDB and Riven library details for the current item and updates the UI.
-        Assumes main_content.item_data holds the original TMDB search result.
-        """
-        # Use instance default delay if not provided
         effective_delay = delay if delay is not None else self.refresh_delay_seconds
 
         main_content = self.query_one(MainContent)
@@ -1117,18 +1058,16 @@ class RivenTUI(App):
             self.notify("Current item is missing ID or media type for refresh.", severity="error")
             return
 
-        # Start spinner to indicate refresh is in progress, keep current card visible
         await self.start_spinner("Repulling item data...")
-        await asyncio.sleep(effective_delay) # Pause before fetching data
+        await asyncio.sleep(effective_delay) 
 
-        # Re-fetch TMDB details
         tmdb_details, error = await self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token"))
 
         if error:
             self.log_message(f"TMDB Details Error during repull: {error}")
             self.notify(f"TMDB Error during repull: {error}", severity="error")
-            main_content.tmdb_details = None # Ensure old data is cleared
-            main_content.item_details = None # Ensure old data is cleared
+            main_content.tmdb_details = None 
+            main_content.item_details = None 
             self.stop_spinner()
             await self.show_item_actions()
             return
@@ -1136,7 +1075,6 @@ class RivenTUI(App):
         main_content.tmdb_details = tmdb_details
         self.log_message("Successfully re-pulled TMDB details.")
 
-        # Re-check Riven library status
         riven_media_type = "tv" if media_type == "tv" else "movie"
         riven_id_to_check = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
         
@@ -1149,8 +1087,8 @@ class RivenTUI(App):
 
         self.log_message(f"Riven library repull complete. Found: {'Yes' if main_content.item_details else 'No'}")
         
-        self.stop_spinner() # Stop spinner after all data is fetched
-        await self.show_item_actions() # Re-render the UI with new data
+        self.stop_spinner() 
+        await self.show_item_actions() 
 
     @on(Button.Pressed, "#btn-apply-filters")
     async def on_apply_filters(self):
@@ -1175,7 +1113,6 @@ class RivenTUI(App):
         )
 
     async def show_library_items(self, limit: int = 20, page: int = 1, sort: str = "date_desc", item_type: str | None = None, search: str | None = None, states: List[str] | None = None, count_only: bool = False, refresh_cache: bool = False) -> None:
-        # Save filters for navigation back
         self.last_library_filters = {
             "limit": limit,
             "page": page,
@@ -1189,15 +1126,13 @@ class RivenTUI(App):
         main_content = self.query_one(MainContent)
         container = main_content.query_one("#main-content-container")
         
-        # 1. Fetch data if cache is empty or refresh requested
         if not self.library_cache or refresh_cache:
-            await container.query("*").remove() # Clear previous content
+            await container.query("*").remove() 
             await self.start_spinner("Fetching full library...")
             
             api_key = self.settings.get("api_key")
             self.library_cache = []
             
-            # Fetch both movies and shows in parallel with high limit
             async def fetch_full(t):
                 resp, err = await self.api.get_items(
                     api_key, limit=999999, page=1, sort="date_desc", 
@@ -1211,54 +1146,43 @@ class RivenTUI(App):
             self.stop_spinner()
             self.log_message(f"Library cache refreshed: {len(self.library_cache)} items total.")
 
-        # 2. Local Filtering
         filtered_items = self.library_cache
         
-        # Filter by Type
         if item_type:
             filtered_items = [i for i in filtered_items if i.get("type") == item_type]
         
-        # Filter by Search
         if search:
             search_query = search.lower()
             filtered_items = [i for i in filtered_items if search_query in (i.get("title") or "").lower()]
             
-        # Filter by States
         if states and states[0]:
             filtered_items = [i for i in filtered_items if i.get("state") in states]
 
-        # 3. Local Sorting
         is_reverse = "desc" in sort
         
         if "title" in sort:
-            # Sort primarily by Title, secondarily by requested_at
             filtered_items.sort(
                 key=lambda x: ((x.get('title') or '').lower(), x.get('requested_at') or '0000-00-00 00:00:00'), 
                 reverse=is_reverse
             )
         else:
-            # Sort primarily by requested_at, secondarily by Title
             filtered_items.sort(
                 key=lambda x: (x.get('requested_at') or '0000-00-00 00:00:00', (x.get('title') or '').lower()), 
                 reverse=is_reverse
             )
 
-        # 4. Local Pagination Calculation
         total_count = len(filtered_items)
         total_pages = math.ceil(total_count / limit) if limit > 0 else 1
         
-        # Clamp page
         if page > total_pages: page = total_pages
         if page < 1: page = 1
         
-        # Update last_library_filters with the potentially clamped page
         self.last_library_filters["page"] = page
 
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
         paged_items = filtered_items[start_idx:end_idx]
 
-        # 5. Rendering
         await container.query("*").remove()
 
         if count_only:
@@ -1292,7 +1216,6 @@ class RivenTUI(App):
                 item_display_widget.add_class(f"library-item-{media_type}")
                 await container.mount(item_display_widget)
         
-        # 6. Pagination UI
         pagination_slot = self.query_one("#pagination-slot")
         await pagination_slot.query("*").remove()
         await pagination_slot.mount(PaginationControl(page, total_pages))
@@ -1301,23 +1224,18 @@ class RivenTUI(App):
 
     @on(LibraryItemCard.Clicked)
     async def on_library_item_clicked(self, event: LibraryItemCard.Clicked) -> None:
-        """Handle clicking on a library item card."""
         item_data = event.item_data
         
-        # 1. Try to get TMDB ID from top level or parent_ids
         tmdb_id = item_data.get("tmdb_id")
         if not tmdb_id and "parent_ids" in item_data:
             tmdb_id = item_data["parent_ids"].get("tmdb_id")
             
         media_type = item_data.get("type")
 
-        # 2. If missing, try to resolve via TVDB or IMDB
         if not tmdb_id:
-            # Try TVDB first
             external_id = item_data.get("tvdb_id") or (item_data.get("parent_ids") or {}).get("tvdb_id")
             source = "tvdb_id"
             
-            # Then IMDB
             if not external_id:
                 external_id = item_data.get("imdb_id") or (item_data.get("parent_ids") or {}).get("imdb_id")
                 source = "imdb_id"
@@ -1338,7 +1256,6 @@ class RivenTUI(App):
             self.notify(f"No TMDB ID found for '{item_data.get('title')}'. Cannot fetch details.", severity="warning")
             return
             
-        # Mock a search result item for the refresh helper
         main_content = self.query_one(MainContent)
         main_content.item_data = {
             "id": tmdb_id,
@@ -1349,7 +1266,6 @@ class RivenTUI(App):
 
     @on(Button.Pressed, "#btn-back-to-library")
     async def handle_back_to_library(self):
-        """Returns to the library list view using saved filters."""
         if self.last_library_filters:
             await self.show_library_items(**self.last_library_filters)
         else:
@@ -1444,14 +1360,12 @@ class RivenTUI(App):
             self.stop_spinner()
             self.log_message(f"Calendar cache refreshed: {len(self.calendar_cache)} items.")
 
-        # Filter items for the selected month/year AND type filters
         year = self.current_calendar_date.year
         month = self.current_calendar_date.month
         
         monthly_items = []
         for item in self.calendar_cache:
             i_type = item.get("item_type")
-            # Apply type filters
             if i_type and not self.calendar_filters.get(i_type, True):
                 continue
 
@@ -1469,10 +1383,8 @@ class RivenTUI(App):
                 except ValueError:
                     continue
 
-        # Sort items by date
         monthly_items.sort(key=lambda x: x["_dt"])
 
-        # Group by date
         grouped_items: Dict[str, List[dict]] = {}
         for item in monthly_items:
             date_key = item["_dt"].strftime("%a, %B %d")
@@ -1480,13 +1392,10 @@ class RivenTUI(App):
                 grouped_items[date_key] = []
             grouped_items[date_key].append(item)
 
-        # Clear and Render
         await container.query("*").remove()
         
-        # 1. Navigation Header
         await container.mount(CalendarHeader(year, month))
         
-        # 2. Legend / Filter Row
         legend_row = Horizontal(id="calendar-legend-row")
         await container.mount(legend_row)
         
@@ -1501,7 +1410,6 @@ class RivenTUI(App):
             pill = FilterPill(label, value=self.calendar_filters[f_type], filter_type=f_type)
             await legend_row.mount(pill)
 
-        # 3. Update Sidebar
         sidebar = self.query_one(Sidebar)
         await sidebar.update_calendar_sidebar(year, month, monthly_items, self.calendar_filters)
 
@@ -1513,13 +1421,11 @@ class RivenTUI(App):
                 day_group = Vertical(classes="calendar-day-group", id=f"day-group-{day_num}")
                 await container.mount(day_group)
                 
-                # Day Header
                 header_row = Horizontal(classes="calendar-day-header")
                 await day_group.mount(header_row)
                 await header_row.mount(Label(date_str, classes="calendar-date-label"))
                 await header_row.mount(Label(f"{len(items)} item{'s' if len(items) > 1 else ''}", classes="calendar-count-label"))
                 
-                # Items
                 for item in items:
                     await day_group.mount(CalendarItemCard(item))
 
@@ -1559,7 +1465,6 @@ class RivenTUI(App):
         try:
             target_id = f"#day-group-{day_num}"
             main_content = self.query_one(MainContent)
-            # Query inside the container
             container = main_content.query_one("#main-content-container")
             day_widget = container.query_one(target_id)
             main_content.scroll_to_widget(day_widget)
@@ -1577,7 +1482,6 @@ class RivenTUI(App):
         
         self.last_library_filters["page"] = event.page
         
-        # Update sidebar input
         try:
             page_input = self.query_one("#lib-filter-page", Input)
             page_input.value = str(event.page)
@@ -1653,9 +1557,8 @@ class RivenTUI(App):
             self.log_message(f"Item {item_id} deleted. Response: {response}")
             self.notify(f"Item deleted.", severity="information")
             
-            # Clear item_details to reflect it's no longer in the library
             main_content.item_details = None 
-            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) # Use the new helper for full refresh
+            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
         else:
             self.log_message(f"Failed to delete item {item_id}. API Response: {response}")
             self.notify("Failed to delete item. Check debug log.", severity="error")
@@ -1672,7 +1575,7 @@ class RivenTUI(App):
             self.log_message(f"Item {item_id} reset. Response: {response}")
             self.notify("Item reset successfully.", severity="information")
             
-            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) # Use the new helper for full refresh
+            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
         else:
             self.log_message(f"Failed to reset item {id}. API Response: {response}")
             self.notify("Failed to reset item. Check debug log.", severity="error")
@@ -1689,14 +1592,13 @@ class RivenTUI(App):
             self.log_message(f"Item {item_id} retried. Response: {response}")
             self.notify("Item sent for retry.", severity="information")
             
-            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) # Use the new helper for full refresh
+            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
         else:
             self.log_message(f"Failed to retry item {item_id}. API Response: {response}")
             self.notify("Failed to retry item. Check debug log.", severity="error")
 
     @on(Button.Pressed, "#btn-manual-scrape")
     def handle_manual_scrape_button(self):
-        """Runs the manual scrape logic in a worker to avoid blocking the UI."""
         self.log_message("Manual Scrape button pressed.")
         self.run_worker(self._run_manual_scrape)
 
@@ -1719,7 +1621,6 @@ class RivenTUI(App):
         
         self.log_message(f"Starting manual scrape for {media_type} TMDB ID: {tmdb_id} (Library ID: {riven_item_id})")
 
-        # Determine tvdb_id for scrape_stream call if media_type is tv and item is not in library
         tvdb_id_for_scrape = None
         if media_type == "tv" and not riven_item_id:
             tvdb_id_for_scrape = main_content.tmdb_details.get("external_ids", {}).get("tvdb_id")
@@ -1731,7 +1632,6 @@ class RivenTUI(App):
                 self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
                 return
 
-        # Proceed with stream discovery using the (potentially newly acquired) riven_item_id
         await self.start_spinner("Discovering streams...")
         self.log_message("Pushing ScrapeLogScreen.")
         log_screen = ScrapeLogScreen()
@@ -1782,12 +1682,11 @@ class RivenTUI(App):
 
             if not magnet_link:
                 self.notify("Manual scrape cancelled.", severity="info")
-                self.base_title = "Riven TUI - Manual Scrape Cancelled" # Reset title on cancellation
+                self.base_title = "Riven TUI - Manual Scrape Cancelled" 
                 self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
                 return
 
             self.notify("Starting scrape session...")
-            # --- START_SCRAPE_SESSION ---
             await self.start_spinner("Starting scrape session...")
             current_session_data, error = await self.api.start_scrape_session(media_type, magnet_link, tmdb_id, self.settings.get("api_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape)
             self.stop_spinner()
@@ -1805,7 +1704,6 @@ class RivenTUI(App):
             else:
                 self.base_title = "Riven TUI - Scrape Session Started!"
                 self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
-            # --- END_START_SCRAPE_SESSION ---
 
             session_data = current_session_data
             break
@@ -1820,7 +1718,6 @@ class RivenTUI(App):
             return
 
         if media_type == "movie":
-            # Select the largest cached video file
             video_file = max(containers_files, key=lambda f: f.get('filesize', 0))
             file_id_str = str(video_file.get("file_id"))
 
@@ -1839,16 +1736,13 @@ class RivenTUI(App):
 
             success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("api_key") )
             if success:
-                # --- UPDATE_SCRAPE_ATTRIBUTES ---
                 await self.start_spinner("Updating scrape attributes...")
                 update_payload = payload_for_select[file_id_str]
                 await self.api.update_scrape_attributes(session_id, update_payload, self.settings.get("api_key") )
                 self.stop_spinner()
                 self.base_title = "Riven TUI - Scrape Attributes Updated!"
                 self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
-                # --- END_UPDATE_SCRAPE_ATTRIBUTES ---
                 
-                # --- COMPLETE_SCRAPE_SESSION ---
                 await self.start_spinner("Completing scrape session...")
                 final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("api_key") )
                 self.stop_spinner()
@@ -1857,12 +1751,11 @@ class RivenTUI(App):
                     self.base_title = "Riven TUI - Scrape Completed Successfully!"
                     self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
                     
-                    await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) # Use the new helper for full refresh
+                    await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
                 else:
                     self.notify(f"Finalization Error: {final_response}", severity="error")
                     self.base_title = f"Riven TUI - Scrape Finalization Error: {final_response}!"
                     self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
-                # --- END_COMPLETE_SCRAPE_SESSION ---
             else:
                 self.notify(f"Error selecting file: {response}", severity="error")
                 self.base_title = "Riven TUI - Error Selecting File for Scrape!"
@@ -1898,15 +1791,12 @@ class RivenTUI(App):
 
             success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("api_key") )
             if success:
-                # --- UPDATE_SCRAPE_ATTRIBUTES ---
                 await self.start_spinner("Updating scrape attributes...")
                 await self.api.update_scrape_attributes(session_id, file_mapping, self.settings.get("api_key") )
                 self.stop_spinner()
                 self.base_title = "Riven TUI - Scrape Attributes Updated!"
                 self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
-                # --- END_UPDATE_SCRAPE_ATTRIBUTES ---
                 
-                # --- COMPLETE_SCRAPE_SESSION ---
                 await self.start_spinner("Completing scrape session...")
                 final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("api_key") )
                 self.stop_spinner()
@@ -1915,12 +1805,11 @@ class RivenTUI(App):
                     self.base_title = "Riven TUI - Scrape Completed Successfully!"
                     self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
 
-                    await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) # Use the new helper for full refresh
+                    await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
                 else:
                     self.notify(f"Finalization Error: {final_response}", severity="error")
                     self.base_title = f"Riven TUI - Scrape Finalization Error: {final_response}!"
                     self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
-                # --- END_COMPLETE_SCRAPE_SESSION ---
             else:
                 self.notify(f"Error selecting files: {response}", severity="error")
                 self.base_title = "Riven TUI - Error Selecting Files for Scrape!"
@@ -1954,7 +1843,7 @@ class RivenTUI(App):
             self.log_message("Item added successfully. Refreshing view.")
             self.notify("Item added successfully! Refreshing...", severity="information")
             
-            await self._refresh_current_item_data_and_ui(delay=10) # Longer delay for add operation
+            await self._refresh_current_item_data_and_ui(delay=10) 
         else:
             self.log_message(f"Failed to add item. API response: {response}")
             self.notify("Failed to add item.", severity="error")

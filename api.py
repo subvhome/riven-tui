@@ -33,6 +33,7 @@ class RivenAPI:
         url = f"{self.be_base_url}/api/v1/items/add"
         headers = {"x-api-key": api_key}
         data = {"media_type": media_type, id_type: [str(item_id)]}
+        self.logger.info(f"add_item: URL={url}, Data={data}")
         try:
             resp = await self.client.post(url, headers=headers, json=data)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -43,6 +44,7 @@ class RivenAPI:
         url = f"{self.be_base_url}/api/v1/items/remove"
         headers = {"x-api-key": api_key}
         data = {"ids": [str(item_id)]}
+        self.logger.info(f"delete_item: URL={url}, Data={data}")
         try:
             resp = await self.client.request("DELETE", url, headers=headers, json=data)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -53,6 +55,7 @@ class RivenAPI:
         url = f"{self.be_base_url}/api/v1/items/reset"
         headers = {"x-api-key": api_key}
         data = {"ids": [str(item_id)]}
+        self.logger.info(f"reset_item: URL={url}, Data={data}")
         try:
             resp = await self.client.post(url, headers=headers, json=data)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -63,6 +66,7 @@ class RivenAPI:
         url = f"{self.be_base_url}/api/v1/items/retry"
         headers = {"x-api-key": api_key}
         data = {"ids": [str(item_id)]}
+        self.logger.info(f"retry_item: URL={url}, Data={data}")
         try:
             resp = await self.client.post(url, headers=headers, json=data)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -107,6 +111,7 @@ class RivenAPI:
     async def upload_logs(self, api_key: str):
         url = f"{self.be_base_url}/api/v1/upload_logs"
         headers = {"x-api-key": api_key}
+        self.logger.info(f"upload_logs: URL={url}")
         try:
             resp = await self.client.post(url, headers=headers)
             if resp.status_code == 200:
@@ -116,6 +121,7 @@ class RivenAPI:
             return None, str(e)
 
     async def get_logs_from_url(self, url: str):
+        self.logger.info(f"get_logs_from_url: URL={url}")
         try:
             resp = await self.client.get(url)
             if resp.status_code == 200:
@@ -164,9 +170,8 @@ class RivenAPI:
             params["tvdb_id"] = str(tvdb_id)
         else:
             params["tmdb_id"] = str(tmdb_id)
-            
+        self.logger.info(f"start_scrape_session: URL={url}, Params={params}")
         try:
-            # Riven requires a POST with 0 content-length and params in URL
             resp = await self.client.post(url, headers={"x-api-key": api_key, "Content-Length": "0"}, params=params)
             if resp.status_code == 200:
                 return resp.json(), None
@@ -177,6 +182,7 @@ class RivenAPI:
     async def select_scrape_file(self, session_id: str, file_metadata: dict, api_key: str):
         url = f"{self.be_base_url}/api/v1/scrape/select_files/{session_id}"
         headers = {"x-api-key": api_key}
+        self.logger.info(f"select_scrape_file: URL={url}, Data={file_metadata}")
         try:
             resp = await self.client.post(url, headers=headers, json=file_metadata)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -186,6 +192,7 @@ class RivenAPI:
     async def update_scrape_attributes(self, session_id: str, file_metadata: dict, api_key: str):
         url = f"{self.be_base_url}/api/v1/scrape/update_attributes/{session_id}"
         headers = {"x-api-key": api_key}
+        self.logger.info(f"update_scrape_attributes: URL={url}, Data={file_metadata}")
         try:
             resp = await self.client.post(url, headers=headers, json=file_metadata)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -195,6 +202,7 @@ class RivenAPI:
     async def complete_scrape_session(self, session_id: str, api_key: str):
         url = f"{self.be_base_url}/api/v1/scrape/complete_session/{session_id}"
         headers = {"x-api-key": api_key}
+        self.logger.info(f"complete_scrape_session: URL={url}")
         try:
             resp = await self.client.post(url, headers=headers)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -204,6 +212,7 @@ class RivenAPI:
     async def abort_scrape_session(self, session_id: str, api_key: str):
         url = f"{self.be_base_url}/api/v1/scrape/abort_session/{session_id}"
         headers = {"x-api-key": api_key}
+        self.logger.info(f"abort_scrape_session: URL={url}")
         try:
             resp = await self.client.post(url, headers=headers)
             return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
@@ -213,14 +222,14 @@ class RivenAPI:
     async def parse_torrent_titles(self, titles: list, api_key: str):
         url = f"{self.be_base_url}/api/v1/scrape/parse"
         headers = {"x-api-key": api_key}
+        self.logger.info(f"parse_torrent_titles: URL={url}, Data={titles}")
         try:
             resp = await self.client.post(url, headers=headers, json=titles)
             if resp.status_code == 200:
-                return resp.json(), None # Return (data, None) on success
+                return resp.json(), None
             return None, f"Status: {resp.status_code}, Body: {resp.text}"
         except Exception as e:
             return None, str(e)
-
 
     async def get_poster_chafa(self, poster_url: str, width: int = 80):
         self.logger.info(f"Rendering poster from {poster_url} with width {width}")
@@ -252,7 +261,6 @@ class RivenAPI:
         except Exception as e:
             return None, str(e)
 
-
     async def search_tmdb(self, query: str, token: str):
         if not token or token == "YOUR_TOKEN_HERE":
             return (None, "TMDB Bearer Token not configured in settings.json")
@@ -260,15 +268,14 @@ class RivenAPI:
         url = f"{self.tmdb_base_url}/search/multi"
         headers = {"Authorization": f"Bearer {token}", "accept": "application/json"}
         params = {"query": query, "include_adult": "false", "language": "en-US", "page": "1"}
+        self.logger.info(f"search_tmdb: Query={query}")
         
         try:
             resp = await self.client.get(url, headers=headers, params=params)
             if resp.status_code == 200:
-                # Process the results to a consistent format
                 raw_results = resp.json().get("results", [])
                 processed_results = []
                 for item in raw_results:
-                    # Skip people
                     if item.get("media_type") == "person":
                         continue
                     
@@ -309,7 +316,6 @@ class RivenAPI:
             return (None, str(e))
 
     async def find_tmdb_id(self, external_id: str, source: str, token: str):
-        """Finds a TMDB ID using an external ID (imdb_id, tvdb_id)."""
         if not token or token == "YOUR_TOKEN_HERE":
             return (None, "TMDB Bearer Token not configured in settings.json")
         
@@ -334,12 +340,50 @@ class RivenAPI:
             return (None, str(e))
 
     async def shutdown(self):
-        """Closes the httpx client."""
         await self.client.aclose()
 
     async def get_calendar(self, api_key: str):
         url = f"{self.be_base_url}/api/v1/calendar"
         headers = {"x-api-key": api_key}
+        self.logger.info(f"get_calendar: URL={url}")
+        try:
+            resp = await self.client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Status: {resp.status_code}, Body: {resp.text}"
+        except Exception as e:
+            return None, str(e)
+
+    async def get_settings(self, api_key: str):
+        url = f"{self.be_base_url}/api/v1/settings/get/all"
+        headers = {"x-api-key": api_key}
+        self.logger.info(f"get_settings: URL={url}")
+        try:
+            resp = await self.client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Status: {resp.status_code}, Body: {resp.text}"
+        except Exception as e:
+            return None, str(e)
+
+    async def update_settings(self, settings_data: dict, api_key: str):
+        url = f"{self.be_base_url}/api/v1/settings/set/all" 
+        headers = {"x-api-key": api_key}
+        self.logger.info(f"update_settings: Sending payload to {url}: {settings_data}")
+        try:
+            resp = await self.client.post(url, headers=headers, json=settings_data)
+            self.logger.info(f"update_settings: Status={resp.status_code}, Response={resp.text}")
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Status: {resp.status_code}, Body: {resp.text}"
+        except Exception as e:
+            self.logger.error(f"update_settings Error: {e}")
+            return None, str(e)
+
+    async def get_schema(self, api_key: str):
+        url = f"{self.be_base_url}/api/v1/settings/schema"
+        headers = {"x-api-key": api_key}
+        self.logger.info(f"get_schema: URL={url}")
         try:
             resp = await self.client.get(url, headers=headers)
             if resp.status_code == 200:
