@@ -23,6 +23,7 @@ from rich.markup import escape
 from api import RivenAPI
 from settings_view import SettingsView
 from dashboard_view import DashboardView, DashboardItemClicked, TrendingPageChanged
+from advanced_view import AdvancedView
 import subprocess
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
@@ -643,7 +644,7 @@ class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
 
     base_title = reactive("Riven TUI") 
-    app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings"] = reactive("welcome")
+    app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced"] = reactive("dashboard")
     current_calendar_date = reactive(datetime.now())
     calendar_filters = reactive({"movie": True, "episode": True, "show": True, "season": True})
 
@@ -704,7 +705,8 @@ class RivenTUI(App):
             yield Button("Dashboard", id="btn-header-dashboard")
             yield Button("Search", id="btn-header-search")
             yield Button("Library", id="btn-header-library")
-            yield Button("Discover", id="btn-header-discover", disabled=True)
+            yield Button("Discover", id="btn-header-discover")
+            yield Button("Advanced", id="btn-header-advanced")
             yield Button("Calendar", id="btn-header-calendar")
             yield Button("Settings", id="btn-header-settings")
             yield Static(self.base_title, id="header-title")
@@ -722,6 +724,7 @@ class RivenTUI(App):
                     yield Container(id="pagination-slot") 
             
             yield SettingsView(id="settings-view")
+            yield AdvancedView(id="advanced-view")
 
         if self.settings.get("tui_debug"):
             yield Log(id="debug-log", highlight=True)
@@ -851,6 +854,7 @@ class RivenTUI(App):
         settings_view = self.query_one(SettingsView)
         dashboard_view = self.query_one(DashboardView)
         dashboard_wrapper = self.query_one("#dashboard-wrapper")
+        advanced_view = self.query_one(AdvancedView)
 
         welcome_message.display = False
         search_subheader.display = False
@@ -861,6 +865,7 @@ class RivenTUI(App):
         settings_view.display = False
         dashboard_view.display = False
         dashboard_wrapper.display = False
+        advanced_view.display = False
         
         sidebar.query_one("#sidebar-list-container").display = False
         sidebar.query_one("#sidebar-filters-container").display = False
@@ -872,6 +877,8 @@ class RivenTUI(App):
             dashboard_view.display = True
             dashboard_wrapper.display = True
             self.run_worker(self.refresh_dashboard())
+        elif new_state == "advanced":
+            advanced_view.display = True
         elif new_state == "search":
             search_subheader.display = True
             main_area.display = True
@@ -914,6 +921,10 @@ class RivenTUI(App):
         sidebar.show_library_filters()
         
         await self.show_library_items(refresh_cache=True)
+
+    @on(Button.Pressed, "#btn-header-advanced")
+    def on_advanced_button_pressed(self) -> None:
+        self.app_state = "advanced"
 
     @on(Button.Pressed, "#btn-header-calendar")
     async def on_calendar_button_pressed(self) -> None:

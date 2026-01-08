@@ -4,10 +4,13 @@ import logging
 from typing import List, Optional
 
 class RivenAPI:
+    MDBLIST_API_KEY = "kgx75hvk95is39a6joe68tgux"
+
     def __init__(self, be_base_url, timeout=10.0):
         self.client = httpx.AsyncClient(follow_redirects=True, timeout=timeout)
         self.be_base_url = be_base_url
         self.tmdb_base_url = "https://api.themoviedb.org/3"
+        self.mdblist_base_url = "https://api.mdblist.com"
         self.logger = logging.getLogger("RivenAPI")
         if not self.logger.handlers:
             handler = logging.FileHandler('api.log')
@@ -15,6 +18,38 @@ class RivenAPI:
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
+
+    async def get_mdblist_items(self, list_url_or_id: str):
+        # Handle full URL or just the "user/listname" string
+        path = list_url_or_id.replace("https://mdblist.com/lists/", "").replace("https://api.mdblist.com/lists/", "")
+        
+        # Ensure path is clean and ends with /items/
+        path = path.strip("/")
+        url = f"{self.mdblist_base_url}/lists/{path}/items/"
+        params = {"apikey": self.MDBLIST_API_KEY}
+        
+        self.logger.info(f"get_mdblist_items: URL={url}")
+        
+        try:
+            resp = await self.client.get(url, params=params)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Mdblist error: {resp.status_code} - {resp.text}"
+        except Exception as e:
+            return None, str(e)
+
+    async def bulk_action(self, action: str, item_ids: List[str], api_key: str):
+        # action: remove, reset, retry
+        url = f"{self.be_base_url}/api/v1/items/{action}"
+        headers = {"x-api-key": api_key}
+        data = {"ids": item_ids}
+        method = "DELETE" if action == "remove" else "POST"
+        
+        try:
+            resp = await self.client.request(method, url, headers=headers, json=data)
+            return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}")
+        except Exception as e:
+            return (False, str(e))
 
     async def get_item_by_id(self, media_type: str, media_id: str, api_key: str):
         url = f"{self.be_base_url}/api/v1/items/{media_id}"
