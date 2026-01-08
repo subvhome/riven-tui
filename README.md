@@ -1,85 +1,56 @@
-# A Riven TUI
+# Riven TUI
 
-A modern, terminal-based user interface for managing your **Riven** library. Built with Python and the Textual framework.
+A terminal-based management interface for [Riven](https://github.com/rivenmedia/riven). 
 
-## 📸 Screenshots
+Built for those who prefer staying in the shell, this TUI provides a visual way to monitor your library, discover new content, and handle manual scrapes without opening a browser.
 
-| Main Application | Search View |
-| :---: | :---: |
-| ![Search](assets/tui-1.jpg) | ![Library](assets/tui-2.jpg) |
-| **Library View** | **Calendar** |
-| ![Calendar](assets/tui-3.jpg) | ![Details](assets/tui-4.jpg) |
+![Dashboard](assets/dashboard.jpg)
 
-## 🚀 Features
+## What's inside
 
--   **Library Browsing:** View and filter your existing movies and TV shows.
--   **TMDB Integration:** Search for new content directly from TMDB.
--   **Manual Scraping:** Robust flow for discovering streams, selecting torrents, and mapping files to seasons/episodes.
--   **Release Calendar:** A monthly view of released and upcoming content with category filters.
--   **Settings Management:** Dynamically generated configuration interface driven by the Riven backend schema. Support for nested structures, dropdowns, and multi-line list editing.
--   **Poster Art:** High-quality terminal image rendering using `chafa`.
--   **Live Logs:** View and refresh Riven backend logs directly within the app.
+- **Central Dashboard**: A single view for library statistics (movies/shows), system health, and a feed of recently added media.
+- **Library Analytics**: Custom Unicode-based bar charts for tracking your library state distribution.
+- **Discovery**: Integrated TMDB trending lists with a "Quick Add" feature to send content to Riven instantly.
+- **Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping.
+- **Posters & Visuals**: High-resolution poster rendering using `chafa`.
+- **Live Logs**: Integrated log viewer for the Riven backend.
 
-## 📋 Requirements
+## Installation
 
--   **Python:** 3.12 or higher.
--   **Riven Backend:** A running instance of Riven.
--   **Terminal:** A modern terminal with Unicode support (and truecolor for best results).
--   **System Tools:** `chafa` (Optional, required for poster display).
-
-## 🛠️ Installation
-
-### The Quick Way (Recommended)
-Run this one-liner in your terminal to automatically install, configure, and set up everything you need:
+The easiest way to get set up is the interactive install script. It handles the virtual environment, dependencies, and guides you through the initial configuration.
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh | bash
 ```
 
-### Manual Installation
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/subvhome/riven-tui.git
-    cd riven-tui
-    ```
+### Manual Setup
+1. Clone the repo: `git clone https://github.com/subvhome/riven-tui.git`
+2. Create a venv and install requirements: `pip install -r requirements.txt`
+3. Initialize settings: `cp settings.json.example settings.json`
+4. Run: `python riven_tui.py`
 
-2.  **Set up a virtual environment:**
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate
-    ```
+## Screenshots
 
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+| Library | Search |
+| :---: | :---: |
+| ![Library](assets/tui-2.jpg) | ![Search](assets/tui-1.jpg) |
 
-## ⚙️ Configuration
+| Calendar | Details |
+| :---: | :---: |
+| ![Calendar](assets/tui-3.jpg) | ![Details](assets/tui-4.jpg) |
 
-1.  Copy the example settings file:
-    ```bash
-    cp settings.json.example settings.json
-    ```
-2.  Edit `settings.json` with your specific details:
-    -   `be_config`: Your Riven backend URL and port.
-    -   `api_key`: Your Riven API key.
-    -   `tmdb_bearer_token`: Your TMDB API Read Access Token.
+## Configuration
 
-## 🎮 Usage
+Settings are managed in `settings.json`. The installer will prompt you for these, but you can edit them manually at any time:
 
-Start the application using:
-```bash
-python riven_tui.py
-```
+- `api_key`: Your Riven API key.
+- `tmdb_bearer_token`: TMDB Read Access Token for search and discovery.
+- `be_config`: Connection details for your Riven backend.
+- `chafa_max_width`: Maximum width for poster rendering (default: 100).
 
-### Key Bindings & Navigation
--   **Tab / Arrow Keys:** Navigate between UI elements.
--   **Enter:** Select items or submit searches.
--   **Search:** Use the header button to search TMDB.
--   **Library:** Filter and browse your Riven collection.
--   **Calendar:** View releases by month; use the sidebar to jump to specific dates.
--   **Settings:** Access and modify your Riven configuration with partial update support.
+## Controls
 
-## 📜 License
+The UI supports both keyboard and mouse. Use **Tab** to cycle focus, **Arrows** to navigate lists, and **Enter** to select.
 
-Distributed under the MIT License. See `LICENSE` for more information.
+---
+Built with [Textual](https://github.com/Textualize/textual).
