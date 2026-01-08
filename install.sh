@@ -242,7 +242,8 @@ cat > settings.json <<EOF
 
 EOF
 
-
+# Post-process to remove all blank lines from the generated JSON
+sed -i '/^$/d' settings.json
 
 echo -e "${GREEN}✓ settings.json created successfully.${NC}"
 
