@@ -627,7 +627,62 @@ ListItem {
     text-style: bold underline;
 }
 
-/* Settings View Styles */
+/* Advanced View Styles */
+#advanced-view {
+    width: 100%;
+    height: 100%;
+    padding: 2 4;
+}
+
+#advanced-container {
+    width: 100%;
+    height: auto;
+}
+
+.advanced-label {
+    text-style: bold;
+    color: #BE95C4;
+    margin-bottom: 1;
+}
+
+.advanced-row {
+    height: 1; /* 1-character high */
+    margin-bottom: 1;
+    align: left middle;
+}
+
+.advanced-row Input {
+    width: 1fr;
+    height: 1;
+    border: none;
+    background: #2C3E50;
+    margin-right: 2;
+}
+
+.advanced-row Button {
+    height: 1;
+    min-width: 15;
+}
+
+.advanced-status {
+    height: 1;
+    margin-bottom: 1;
+    text-style: italic;
+}
+
+.advanced-sep {
+    color: #3D5A80;
+    margin: 1 0;
+}
+
+.advanced-hint {
+    color: #666;
+    margin-left: 2;
+}
+
+#adv-actions-row Button {
+    margin-right: 2;
+}
 #settings-container {
     height: 1fr;
     width: 100%;
