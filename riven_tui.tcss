@@ -855,7 +855,7 @@ ListItem {
 
 #dashboard-header-container {
     height: auto;
-    margin-bottom: 0;
+    margin-bottom: 2; /* 2 lines of space after top bar */
     align: center middle;
 }
 
@@ -872,33 +872,28 @@ ListItem {
     text-align: center;
 }
 
-.dashboard-spacer {
-    height: 0;
-}
-
 #dashboard-main-content {
     height: auto;
     width: 100%;
-    margin-bottom: 0;
+    align: center middle; /* Center the group of tiles */
+    margin-bottom: 1; /* 1 line of space before graphs */
 }
 
 .dashboard-column {
     height: auto;
-    width: 1fr;
+    margin: 0 3; /* Equal space between columns and edges */
 }
 
 #dashboard-recent-col {
-    width: 40;
-    padding-right: 2;
+    width: 32;
 }
 
 #dashboard-trending-col {
-    width: 40;
-    padding-right: 2;
+    width: 32;
 }
 
 #dashboard-status-col {
-    width: 25;
+    width: 22;
 }
 
 .dashboard-section-header-row {
