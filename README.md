@@ -4,7 +4,7 @@ A terminal-based management interface for [Riven](https://github.com/rivenmedia/
 
 Built for those who prefer staying in the shell, this TUI provides a visual way to monitor your library, discover new content, and handle manual scrapes without opening a browser.
 
-![Dashboard](assets/dashboard.jpg)
+![Dashboard](assets/welcome-dashboard.jpg)
 
 ## What's inside
 
@@ -33,11 +33,11 @@ curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh |
 
 | Library | Search |
 | :---: | :---: |
-| ![Library](assets/tui-2.jpg) | ![Search](assets/tui-1.jpg) |
+| ![Library](assets/library.jpg) | ![Search](assets/search.jpg) |
 
-| Calendar | Details |
-| :---: | :---: |
-| ![Calendar](assets/tui-3.jpg) | ![Details](assets/tui-4.jpg) |
+| Calendar |
+| :---: |
+| ![Calendar](assets/calendar.jpg) |
 
 ## Configuration
 
