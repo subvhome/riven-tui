@@ -29,6 +29,14 @@ A modern, terminal-based user interface for managing your **Riven** library. Bui
 
 ## 🛠️ Installation
 
+### The Quick Way (Recommended)
+Run this one-liner in your terminal to automatically install, configure, and set up everything you need:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh | bash
+```
+
+### Manual Installation
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/subvhome/riven-tui.git

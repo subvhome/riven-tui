@@ -11,3 +11,4 @@ __pycache__/
 
 # Tooling
 .geminiignore
+settings_structure.md
