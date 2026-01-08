@@ -339,6 +339,45 @@ class RivenAPI:
             self.logger.error(f"find_tmdb_id Error: {e}")
             return (None, str(e))
 
+    async def get_tmdb_trending(self, token: str, media_type: str = "all", time_window: str = "day", page: int = 1):
+        if not token or token == "YOUR_TOKEN_HERE":
+            return (None, "TMDB Bearer Token not configured")
+        
+        url = f"{self.tmdb_base_url}/trending/{media_type}/{time_window}"
+        headers = {"Authorization": f"Bearer {token}", "accept": "application/json"}
+        params = {"page": str(page)}
+        self.logger.info(f"get_tmdb_trending: URL={url}, Page={page}")
+        
+        try:
+            resp = await self.client.get(url, headers=headers, params=params)
+            if resp.status_code == 200:
+                return (resp.json().get("results", []), None)
+            return (None, f"TMDB trending failed: Status {resp.status_code}")
+        except Exception as e:
+            return (None, str(e))
+
+    async def get_stats(self, api_key: str):
+        url = f"{self.be_base_url}/api/v1/stats"
+        headers = {"x-api-key": api_key}
+        try:
+            resp = await self.client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Status: {resp.status_code}"
+        except Exception as e:
+            return None, str(e)
+
+    async def get_services(self, api_key: str):
+        url = f"{self.be_base_url}/api/v1/services"
+        headers = {"x-api-key": api_key}
+        try:
+            resp = await self.client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Status: {resp.status_code}"
+        except Exception as e:
+            return None, str(e)
+
     async def shutdown(self):
         await self.client.aclose()
 

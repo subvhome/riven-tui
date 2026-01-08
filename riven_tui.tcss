@@ -771,3 +771,171 @@ ListItem {
     color: #666;
     margin-top: 2;
 }
+
+/* Dashboard Styles - Minimalist, Centered & Bordered */
+#dashboard-wrapper {
+    width: 100%;
+    height: 100%;
+    align: center middle;
+}
+
+#dashboard-view {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    border: none;
+    align: center top;
+}
+
+#dashboard-content-wrapper {
+    width: 120;
+    height: 1fr;
+    margin: 2 0;
+    padding: 1 2;
+    border: round #3D5A80;
+    align: center top;
+    overflow-y: auto;
+}
+
+#dashboard-header-container {
+    height: auto;
+    margin-bottom: 0;
+    align: center middle;
+}
+
+.dashboard-header-line {
+    color: #3D5A80;
+    width: 100%;
+    text-align: center;
+}
+
+#dashboard-stats-line {
+    text-style: bold;
+    padding: 0 1;
+    width: 100%;
+    text-align: center;
+}
+
+.dashboard-spacer {
+    height: 0;
+}
+
+#dashboard-main-content {
+    height: auto;
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.dashboard-column {
+    height: auto;
+    width: 1fr;
+}
+
+#dashboard-recent-col {
+    width: 40;
+    padding-right: 2;
+}
+
+#dashboard-trending-col {
+    width: 40;
+    padding-right: 2;
+}
+
+#dashboard-status-col {
+    width: 25;
+}
+
+.dashboard-section-header-row {
+    height: 1;
+    align: left middle;
+}
+
+.dashboard-nav-btn {
+    min-width: 3;
+    height: 1;
+    border: none;
+    background: #2C3E50;
+    color: #F0F0F0;
+    margin-left: 1;
+    padding: 0;
+}
+
+.dashboard-nav-btn:hover {
+    background: #3D5A80;
+}
+
+.dashboard-section-title {
+    text-style: bold;
+    color: #BE95C4;
+}
+
+.dashboard-section-sep {
+    color: #3D5A80;
+    margin-bottom: 0;
+}
+
+.dashboard-list-item {
+    height: 1;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+
+.dashboard-list-item Label {
+    padding: 0;
+}
+
+.dashboard-list-item:hover {
+    background: #3D5A80;
+}
+
+#list-recent-added {
+    height: 5;
+    background: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+#list-trending {
+    height: 10;
+    background: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+#status-items-container {
+    height: 10;
+    overflow-y: auto;
+}
+
+#status-items-container Label {
+    height: 1;
+}
+
+#dashboard-trending-container {
+    height: auto;
+    width: 100%;
+}
+
+#dashboard-graph-row {
+    height: auto;
+    width: 100%;
+    margin-top: 1;
+    align: center middle;
+}
+
+#dashboard-graph-row .dashboard-section-title {
+    width: 100%;
+    text-align: center;
+}
+
+#custom-bar-chart {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+}
+
+

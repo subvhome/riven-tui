@@ -22,6 +22,7 @@ from rich.markup import escape
 
 from api import RivenAPI
 from settings_view import SettingsView
+from dashboard_view import DashboardView, DashboardItemClicked, TrendingPageChanged
 import subprocess
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
@@ -642,7 +643,7 @@ class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
 
     base_title = reactive("Riven TUI") 
-    app_state: Literal["welcome", "search", "library", "calendar", "settings"] = reactive("welcome")
+    app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings"] = reactive("welcome")
     current_calendar_date = reactive(datetime.now())
     calendar_filters = reactive({"movie": True, "episode": True, "show": True, "season": True})
 
@@ -664,6 +665,8 @@ class RivenTUI(App):
         self.last_library_filters = {}
         self.library_cache: List[dict] = [] 
         self.calendar_cache: List[dict] = [] 
+        self.navigation_source: Literal["dashboard", "library", "search"] = "dashboard"
+        self.current_trending_page = 1
 
     def log_message(self, message: str):
         if self.settings.get("tui_debug"):
@@ -698,6 +701,7 @@ class RivenTUI(App):
         
     def compose(self) -> ComposeResult:
         with Horizontal(id="header-bar"):
+            yield Button("Dashboard", id="btn-header-dashboard")
             yield Button("Search", id="btn-header-search")
             yield Button("Library", id="btn-header-library")
             yield Button("Discover", id="btn-header-discover", disabled=True)
@@ -708,6 +712,8 @@ class RivenTUI(App):
         yield SearchArea(id="search-subheader")
         
         with Container(id="workspace"):
+            with Vertical(id="dashboard-wrapper"):
+                yield DashboardView(id="dashboard-view")
             yield Static("Welcome to Riven TUI! Click 'Search' to begin.", id="welcome-message")
             with Horizontal(id="main-area"):
                 yield Sidebar(id="sidebar")
@@ -732,7 +738,6 @@ class RivenTUI(App):
                 self.exit()
                 return
 
-        self.app_state = "welcome" 
         try:
             be_url = self.build_url("be_config")
             timeout = self.settings.get("request_timeout", 10.0)
@@ -740,6 +745,7 @@ class RivenTUI(App):
             self.api = RivenAPI(be_url, timeout=timeout)
             self.log_message(f"API Initialized: BE='{be_url}'")
             self.spinner = TitleSpinner(self, self.base_title) 
+            self.app_state = "dashboard" 
         except Exception as e:
             self.log_message(f"Config Error: {e}")
             self.notify(f"Config Error: {e}", severity="error")
@@ -748,7 +754,93 @@ class RivenTUI(App):
         if hasattr(self, "api"):
             await self.api.shutdown()
 
-    def watch_app_state(self, new_state: Literal["welcome", "search", "library", "calendar", "settings"]) -> None:
+    async def refresh_dashboard(self):
+        if not hasattr(self, "api"):
+            return
+            
+        dashboard_view = self.query_one(DashboardView)
+        api_key = self.settings.get("api_key")
+        tmdb_token = self.settings.get("tmdb_bearer_token")
+
+        # 1. Update Stats & Health
+        try:
+            stats, _ = await self.api.get_stats(api_key)
+            status = "Online" if stats is not None else "Offline"
+            await dashboard_view.update_stats(stats, status)
+            
+            if stats:
+                services, _ = await self.api.get_services(api_key)
+                settings, _ = await self.api.get_settings(api_key)
+                
+                if services and settings:
+                    enabled_services = []
+                    # Helper to recursively find "enabled": True in settings
+                    def find_enabled(obj, path=""):
+                        if isinstance(obj, dict):
+                            if obj.get("enabled") is True:
+                                service_key = path.split(".")[-1]
+                                if service_key in services:
+                                    enabled_services.append(service_key)
+                            for k, v in obj.items():
+                                find_enabled(v, f"{path}.{k}" if path else k)
+
+                    find_enabled(settings)
+                    
+                    # Ensure unique and sorted
+                    enabled_services = sorted(list(set(enabled_services)))
+                    await dashboard_view.update_services(services, enabled_services)
+        except Exception as e:
+            self.log_message(f"Dashboard Refresh Error: {e}")
+
+        # 2. Update Recently Added
+        try:
+            recent_resp, _ = await self.api.get_items(api_key, limit=10, sort="date_desc")
+            if recent_resp:
+                await dashboard_view.update_recent(recent_resp.get("items", []))
+        except Exception as e:
+            self.log_message(f"Dashboard Recent Error: {e}")
+
+        # 3. Update Trending (Paginated)
+        try:
+            trending_items, _ = await self.api.get_tmdb_trending(tmdb_token, page=self.current_trending_page)
+            if trending_items:
+                await dashboard_view.update_trending(trending_items, page=self.current_trending_page)
+        except Exception as e:
+            self.log_message(f"Dashboard Trending Error: {e}")
+
+    @on(TrendingPageChanged)
+    async def on_trending_page_changed(self, message: TrendingPageChanged):
+        self.current_trending_page += message.delta
+        if self.current_trending_page < 1:
+            self.current_trending_page = 1
+        await self.refresh_dashboard()
+
+    @on(DashboardItemClicked)
+    async def handle_dashboard_item_clicked(self, message: DashboardItemClicked):
+        if message.media_type == "riven":
+            # Jump to library detail
+            self.navigation_source = "dashboard"
+            item_data = message.item_data
+            tmdb_id = item_data.get("tmdb_id")
+            if not tmdb_id and "parent_ids" in item_data:
+                tmdb_id = item_data["parent_ids"].get("tmdb_id")
+            
+            if tmdb_id:
+                self.app_state = "library"
+                main_content = self.query_one(MainContent)
+                main_content.item_data = {
+                    "id": tmdb_id,
+                    "media_type": "tv" if item_data.get("type") == "show" else item_data.get("type")
+                }
+                await self._refresh_current_item_data_and_ui(delay=0)
+        else:
+            # Jump to search detail
+            self.app_state = "search"
+            main_content = self.query_one(MainContent)
+            main_content.item_data = message.item_data
+            await self._refresh_current_item_data_and_ui(delay=0)
+
+    def watch_app_state(self, new_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings"]) -> None:
         welcome_message = self.query_one("#welcome-message")
         search_subheader = self.query_one("#search-subheader")
         main_area = self.query_one("#main-area")
@@ -757,6 +849,8 @@ class RivenTUI(App):
         search_input = self.query_one("#search-input")
         pagination_slot = self.query_one("#pagination-slot")
         settings_view = self.query_one(SettingsView)
+        dashboard_view = self.query_one(DashboardView)
+        dashboard_wrapper = self.query_one("#dashboard-wrapper")
 
         welcome_message.display = False
         search_subheader.display = False
@@ -765,6 +859,8 @@ class RivenTUI(App):
         main_content.display = False
         pagination_slot.display = False
         settings_view.display = False
+        dashboard_view.display = False
+        dashboard_wrapper.display = False
         
         sidebar.query_one("#sidebar-list-container").display = False
         sidebar.query_one("#sidebar-filters-container").display = False
@@ -772,6 +868,10 @@ class RivenTUI(App):
 
         if new_state == "welcome":
             welcome_message.display = True
+        elif new_state == "dashboard":
+            dashboard_view.display = True
+            dashboard_wrapper.display = True
+            self.run_worker(self.refresh_dashboard())
         elif new_state == "search":
             search_subheader.display = True
             main_area.display = True
@@ -796,6 +896,10 @@ class RivenTUI(App):
             settings_view.display = True
             if not settings_view.settings_data:
                 settings_view.post_message(Button.Pressed(settings_view.query_one("#btn-refresh-settings")))
+
+    @on(Button.Pressed, "#btn-header-dashboard")
+    def on_dashboard_button_pressed(self) -> None: 
+        self.app_state = "dashboard"
 
     @on(Button.Pressed, "#btn-header-search")
     def on_search_button_pressed(self) -> None: 
@@ -987,8 +1091,8 @@ class RivenTUI(App):
         if not riven_data:
             action_buttons.append(Button("Add to Library", id="btn-add", variant="success"))
 
-        if self.app_state == "library":
-            action_buttons.append(Button("Back to List", id="btn-back-to-library", variant="primary"))
+        if self.app_state == "library" or self.navigation_source == "dashboard":
+            action_buttons.append(Button("Back", id="btn-back-to-library", variant="primary"))
 
         action_buttons.append(Button("Print TMDB JSON", id="btn-print-json"))
         
@@ -1224,6 +1328,7 @@ class RivenTUI(App):
 
     @on(LibraryItemCard.Clicked)
     async def on_library_item_clicked(self, event: LibraryItemCard.Clicked) -> None:
+        self.navigation_source = "library"
         item_data = event.item_data
         
         tmdb_id = item_data.get("tmdb_id")
@@ -1266,10 +1371,15 @@ class RivenTUI(App):
 
     @on(Button.Pressed, "#btn-back-to-library")
     async def handle_back_to_library(self):
-        if self.last_library_filters:
-            await self.show_library_items(**self.last_library_filters)
+        if self.navigation_source == "dashboard":
+            self.app_state = "dashboard"
+        elif self.navigation_source == "library":
+            if self.last_library_filters:
+                await self.show_library_items(**self.last_library_filters)
+            else:
+                await self.show_library_items()
         else:
-            await self.show_library_items()
+            self.app_state = "library"
 
     async def show_initial_logs(self):
         self.log_message("Fetching initial logs...")
