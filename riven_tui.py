@@ -836,6 +836,17 @@ class RivenTUI(App):
         self.run_worker(self.perform_startup())
 
     async def perform_startup(self) -> None:
+        # --- Cleanup: remove redundant 'y/' folder if it exists ---
+        import os
+        import shutil
+        if os.path.exists("y") and os.path.isdir("y"):
+            try:
+                shutil.rmtree("y")
+                self.log_message("Auto-Cleanup: Removed redundant 'y/' folder.")
+            except Exception as e:
+                self.log_message(f"Auto-Cleanup Error (y/): {e}")
+        # ---------------------------------------------------------
+
         # --- Migration: api_key -> riven_key ---
         if "api_key" in self.settings and "riven_key" not in self.settings:
             self.settings["riven_key"] = self.settings.pop("api_key")
