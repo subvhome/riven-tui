@@ -75,8 +75,9 @@ class AdvancedView(Vertical):
             imdb_id = m.get("imdb_id")
             if not imdb_id: return None
             async with semaphore:
+                # Use the search endpoint for IMDB IDs as proven in your curl
                 resp, err = await self.app.api.get_items(riven_key, search=imdb_id, limit=1)
-                if resp and resp.get("total_items", 0) > 0:
+                if resp and resp.get("items"):
                     return resp["items"][0]
             return None
 
@@ -84,10 +85,9 @@ class AdvancedView(Vertical):
             tvdb_id = s.get("tvdb_id")
             if not tvdb_id: return None
             async with semaphore:
-                # Search by TVDB ID
-                resp, err = await self.app.api.get_items(riven_key, search=str(tvdb_id), limit=1)
-                if resp and resp.get("total_items", 0) > 0:
-                    return resp["items"][0]
+                # Use the direct ID lookup endpoint for TVDB as proven in your curl
+                item = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key)
+                return item
             return None
 
         # Create specific tasks for movies and shows
