@@ -22,7 +22,7 @@ from rich.markup import escape
 
 from api import RivenAPI
 from settings_view import SettingsView
-from dashboard_view import DashboardView, DashboardItemClicked, TrendingPageChanged
+from dashboard_view import DashboardView, DashboardItemClicked, TrendingPageChanged, RefreshSystemStatus
 from advanced_view import AdvancedView
 from version import VERSION
 import subprocess
@@ -201,7 +201,7 @@ class FileMappingScreen(ModalScreen[dict]):
     @on(Button.Pressed, "#btn-abort-session")
     async def on_abort_session(self, event: Button.Pressed) -> None: 
         if self.session_id:
-            success, response = await self.app.api.abort_scrape_session(self.session_id, self.app.settings.get("api_key"))
+            success, response = await self.app.api.abort_scrape_session(self.session_id, self.app.settings.get("riven_key"))
             if success:
                 self.app.notify("Scrape session aborted.", severity="info")
                 self.dismiss(None)
@@ -685,7 +685,8 @@ class RivenTUI(App):
             with open("settings.json", "r") as f:
                 self.settings = json.load(f)
         except Exception as e:
-            self.log_message(f"Error loading settings.json: {e}")
+            # Only use file logger here since TUI is not ready
+            self.file_logger.error(f"Error loading settings.json: {e}")
             self.settings = {}
         
         self.chafa_available = shutil.which("chafa") is not None
@@ -757,6 +758,17 @@ class RivenTUI(App):
         self.run_worker(self.perform_startup())
 
     async def perform_startup(self) -> None:
+        # --- Migration: api_key -> riven_key ---
+        if "api_key" in self.settings and "riven_key" not in self.settings:
+            self.settings["riven_key"] = self.settings.pop("api_key")
+            self.log_message("Migrating api_key to riven_key in settings.json...")
+            try:
+                with open("settings.json", "w") as f:
+                    json.dump(self.settings, f, indent=4)
+            except Exception as e:
+                self.log_message(f"Migration Error (Saving): {e}")
+        # ---------------------------------------
+
         if not self.chafa_available:
             if not await self.push_screen_wait(ChafaCheckScreen()):
                 self.exit()
@@ -785,20 +797,20 @@ class RivenTUI(App):
             return
             
         dashboard_view = self.query_one(DashboardView)
-        api_key = self.settings.get("api_key")
+        riven_key = self.settings.get("riven_key")
         tmdb_token = self.settings.get("tmdb_bearer_token")
 
         # 1. Update Stats & Health
         try:
-            stats, _ = await self.api.get_stats(api_key)
+            stats, stats_err = await self.api.get_stats(riven_key)
             status = "Online" if stats is not None else "Offline"
             await dashboard_view.update_stats(stats, status)
             
-            if stats:
-                services, _ = await self.api.get_services(api_key)
-                settings, _ = await self.api.get_settings(api_key)
+            if stats is not None:
+                services, _ = await self.api.get_services(riven_key)
+                settings, _ = await self.api.get_settings(riven_key)
                 
-                if services and settings:
+                if services is not None and settings is not None:
                     enabled_services = []
                     # Helper to recursively find "enabled": True in settings
                     def find_enabled(obj, path=""):
@@ -820,19 +832,24 @@ class RivenTUI(App):
 
         # 2. Update Recently Added
         try:
-            recent_resp, _ = await self.api.get_items(api_key, limit=10, sort="date_desc")
-            if recent_resp:
+            recent_resp, recent_err = await self.api.get_items(riven_key, limit=10, sort="date_desc")
+            if recent_resp is not None:
                 await dashboard_view.update_recent(recent_resp.get("items", []))
         except Exception as e:
             self.log_message(f"Dashboard Recent Error: {e}")
 
         # 3. Update Trending (Paginated)
         try:
-            trending_items, _ = await self.api.get_tmdb_trending(tmdb_token, page=self.current_trending_page)
-            if trending_items:
+            trending_items, trending_err = await self.api.get_tmdb_trending(tmdb_token, page=self.current_trending_page)
+            if trending_items is not None:
                 await dashboard_view.update_trending(trending_items, page=self.current_trending_page)
         except Exception as e:
             self.log_message(f"Dashboard Trending Error: {e}")
+
+    @on(RefreshSystemStatus)
+    async def on_refresh_system_status(self, message: RefreshSystemStatus):
+        self.notify("Refreshing system status...", timeout=2)
+        await self.refresh_dashboard()
 
     @on(TrendingPageChanged)
     async def on_trending_page_changed(self, message: TrendingPageChanged):
@@ -1221,7 +1238,7 @@ class RivenTUI(App):
             main_content.item_details = None
         else:
             self.log_message(f"Checking Riven library for {riven_media_type} with id {riven_id_to_check}")
-            main_content.item_details = await self.api.get_item_by_id(riven_media_type, str(riven_id_to_check), self.settings.get("api_key"))
+            main_content.item_details = await self.api.get_item_by_id(riven_media_type, str(riven_id_to_check), self.settings.get("riven_key"))
 
         self.log_message(f"Riven library repull complete. Found: {'Yes' if main_content.item_details else 'No'}")
         
@@ -1268,12 +1285,12 @@ class RivenTUI(App):
             await container.query("*").remove() 
             await self.start_spinner("Fetching full library...")
             
-            api_key = self.settings.get("api_key")
+            riven_key = self.settings.get("riven_key")
             self.library_cache = []
             
             async def fetch_full(t):
                 resp, err = await self.api.get_items(
-                    api_key, limit=999999, page=1, sort="date_desc", 
+                    riven_key, limit=999999, page=1, sort="date_desc", 
                     item_type=t, extended=False
                 )
                 return resp.get("items", []) if resp else []
@@ -1417,7 +1434,7 @@ class RivenTUI(App):
 
     async def show_initial_logs(self):
         self.log_message("Fetching initial logs...")
-        url, error = await self.api.upload_logs(self.settings.get("api_key"))
+        url, error = await self.api.upload_logs(self.settings.get("riven_key"))
         if error:
             if "[Errno -3]" in error:
                 self.notify("Error: DNS lookup failed. Check your internet connection.", severity="error")
@@ -1487,8 +1504,8 @@ class RivenTUI(App):
             await container.query("*").remove()
             await self.start_spinner("Fetching calendar...")
             
-            api_key = self.settings.get("api_key")
-            resp, err = await self.api.get_calendar(api_key)
+            riven_key = self.settings.get("riven_key")
+            resp, err = await self.api.get_calendar(riven_key)
             
             if err:
                 self.log_message(f"Calendar Fetch Error: {err}")
@@ -1637,7 +1654,7 @@ class RivenTUI(App):
     @on(Button.Pressed, "#btn-refresh-logs")
     async def refresh_logs(self):
         self.log_message("Refreshing logs...")
-        url, error = await self.api.upload_logs(self.settings.get("api_key"))
+        url, error = await self.api.upload_logs(self.settings.get("riven_key"))
         if error:
             if "[Errno -3]" in error:
                 self.notify("Error: DNS lookup failed. Check your internet connection.", severity="error")
@@ -1696,7 +1713,7 @@ class RivenTUI(App):
         if not item_id: return
 
         self.log_message(f"Deleting item {item_id}...")
-        success, response = await self.api.delete_item(item_id, self.settings.get("api_key"))
+        success, response = await self.api.delete_item(item_id, self.settings.get("riven_key"))
         if success:
             self.log_message(f"Item {item_id} deleted. Response: {response}")
             self.notify(f"Item deleted.", severity="information")
@@ -1714,7 +1731,7 @@ class RivenTUI(App):
         if not item_id: return
 
         self.log_message(f"Resetting item {item_id}...")
-        success, response = await self.api.reset_item(item_id, self.settings.get("api_key"))
+        success, response = await self.api.reset_item(item_id, self.settings.get("riven_key"))
         if success:
             self.log_message(f"Item {item_id} reset. Response: {response}")
             self.notify("Item reset successfully.", severity="information")
@@ -1731,7 +1748,7 @@ class RivenTUI(App):
         if not item_id: return
 
         self.log_message(f"Retrying item {item_id}...")
-        success, response = await self.api.retry_item(item_id, self.settings.get("api_key"))
+        success, response = await self.api.retry_item(item_id, self.settings.get("riven_key"))
         if success:
             self.log_message(f"Item {item_id} retried. Response: {response}")
             self.notify("Item sent for retry.", severity="information")
@@ -1785,7 +1802,7 @@ class RivenTUI(App):
         all_streams = {}
         self.log_message("Starting stream discovery loop.")
         try:
-            async for line in self.api.scrape_stream(media_type, tmdb_id, self.settings.get("api_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape):
+            async for line in self.api.scrape_stream(media_type, tmdb_id, self.settings.get("riven_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape):
                 if line.startswith("data:"):
                     data_content = line[len("data:"):].strip()
                     if data_content == "[DONE]":
@@ -1832,7 +1849,7 @@ class RivenTUI(App):
 
             self.notify("Starting scrape session...")
             await self.start_spinner("Starting scrape session...")
-            current_session_data, error = await self.api.start_scrape_session(media_type, magnet_link, tmdb_id, self.settings.get("api_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape)
+            current_session_data, error = await self.api.start_scrape_session(media_type, magnet_link, tmdb_id, self.settings.get("riven_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape)
             self.stop_spinner()
 
             if error and "Torrent is not cached" in error:
@@ -1867,7 +1884,7 @@ class RivenTUI(App):
 
             self.log_message(f"Selected cached file: {video_file.get('filename')}")
             
-            await self.api.parse_torrent_titles([video_file.get('filename')], self.settings.get("api_key"))
+            await self.api.parse_torrent_titles([video_file.get('filename')], self.settings.get("riven_key"))
 
             payload_for_select = {
                 file_id_str: {
@@ -1878,17 +1895,17 @@ class RivenTUI(App):
                 }
             }
 
-            success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("api_key") )
+            success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("riven_key") )
             if success:
                 await self.start_spinner("Updating scrape attributes...")
                 update_payload = payload_for_select[file_id_str]
-                await self.api.update_scrape_attributes(session_id, update_payload, self.settings.get("api_key") )
+                await self.api.update_scrape_attributes(session_id, update_payload, self.settings.get("riven_key") )
                 self.stop_spinner()
                 self.base_title = "Riven TUI - Scrape Attributes Updated!"
                 self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
                 
                 await self.start_spinner("Completing scrape session...")
-                final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("api_key") )
+                final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("riven_key") )
                 self.stop_spinner()
                 if final_success:
                     self.notify("Manual scrape initiated successfully!", severity="success")
@@ -1907,7 +1924,7 @@ class RivenTUI(App):
         
         elif media_type == "tv":
             filenames = [f.get("filename") for f in containers_files if f.get("filename")]
-            response, error = await self.api.parse_torrent_titles(filenames, self.settings.get("api_key"))
+            response, error = await self.api.parse_torrent_titles(filenames, self.settings.get("riven_key"))
             
             if error:
                 self.notify(f"Error parsing titles: {error}", severity="error")
@@ -1933,16 +1950,16 @@ class RivenTUI(App):
                     file_id_str = str(file_data.get("file_id"))
                     payload_for_select[file_id_str] = file_data
 
-            success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("api_key") )
+            success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("riven_key") )
             if success:
                 await self.start_spinner("Updating scrape attributes...")
-                await self.api.update_scrape_attributes(session_id, file_mapping, self.settings.get("api_key") )
+                await self.api.update_scrape_attributes(session_id, file_mapping, self.settings.get("riven_key") )
                 self.stop_spinner()
                 self.base_title = "Riven TUI - Scrape Attributes Updated!"
                 self._clear_notification_timer = self.set_timer(NOTIFICATION_CLEAR_DELAY, self._reset_base_title)
                 
                 await self.start_spinner("Completing scrape session...")
-                final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("api_key") )
+                final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("riven_key") )
                 self.stop_spinner()
                 if final_success:
                     self.notify("Manual scrape for TV show initiated successfully!", severity="success")
@@ -1981,7 +1998,7 @@ class RivenTUI(App):
 
         self.log_message(f"Adding item '{title}'. Type: {add_media_type}, ID Type: {id_type}, ID: {id_to_add}")
         self.notify(f"Adding '{title}' to library...")
-        success, response = await self.api.add_item(add_media_type, id_type, str(id_to_add), self.settings.get("api_key") )
+        success, response = await self.api.add_item(add_media_type, id_type, str(id_to_add), self.settings.get("riven_key") )
 
         if success:
             self.log_message("Item added successfully. Refreshing view.")

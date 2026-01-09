@@ -53,7 +53,7 @@ The Advanced tab allows you to cross-reference your Riven library with external 
 
 Settings are managed in `settings.json`. The installer will prompt you for these, but you can edit them manually at any time:
 
-- `api_key`: Your Riven API key.
+- `riven_key`: Your Riven API key.
 - `tmdb_bearer_token`: [TMDB Read Access Token](https://www.themoviedb.org/settings/api) for search and discovery.
 - `be_config`: Connection details for your Riven backend.
 - `chafa_max_width`: Maximum width for poster rendering (default: 100).

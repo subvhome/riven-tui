@@ -50,8 +50,8 @@ class MdblistView(Vertical):
         
         # 2. Fetch Riven Library
         log.write_line("Downloading full Riven library index...")
-        api_key = self.app.settings.get("api_key")
-        lib_resp, lib_err = await api.get_items(api_key, limit=999999, extended=False)
+        riven_key = self.app.settings.get("riven_key")
+        lib_resp, lib_err = await api.get_items(riven_key, limit=999999, extended=False)
         
         if lib_err:
             log.write_line(f"Error fetching library: {lib_err}")
@@ -117,7 +117,7 @@ class MdblistView(Vertical):
             return
 
         api = self.app.api
-        api_key = self.app.settings.get("api_key")
+        riven_key = self.app.settings.get("riven_key")
         log = self.query_one("#mdblist-log", Log)
         
         log.write_line(f"🚀 Executing BULK {action.upper()} on {len(self.matched_riven_ids)} items...")
@@ -126,11 +126,11 @@ class MdblistView(Vertical):
         msg = ""
         
         if action == "delete":
-            success, msg = await api.bulk_delete_items(self.matched_riven_ids, api_key)
+            success, msg = await api.bulk_delete_items(self.matched_riven_ids, riven_key)
         elif action == "retry":
-            success, msg = await api.bulk_retry_items(self.matched_riven_ids, api_key)
+            success, msg = await api.bulk_retry_items(self.matched_riven_ids, riven_key)
         elif action == "reset":
-            success, msg = await api.bulk_reset_items(self.matched_riven_ids, api_key)
+            success, msg = await api.bulk_reset_items(self.matched_riven_ids, riven_key)
 
         if success:
             log.write_line(f"✅ Bulk {action} successful!")
