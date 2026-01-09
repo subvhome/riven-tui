@@ -670,6 +670,34 @@ ListItem {
     text-style: italic;
 }
 
+.advanced-sub-label {
+    text-style: bold;
+    color: #BE95C4;
+    margin-bottom: 0;
+}
+
+.advanced-scroll-box {
+    height: 12; /* Medium size */
+    border: solid #3D5A80;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+#adv-matched-list {
+    background: transparent;
+    height: 1fr;
+}
+
+#adv-matched-list ListItem {
+    height: 1;
+    padding: 0;
+}
+
+#adv-matched-list ListItem Label {
+    padding: 0;
+    width: 100%;
+}
+
 .advanced-sep {
     color: #3D5A80;
     margin: 1 0;

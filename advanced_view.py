@@ -1,6 +1,6 @@
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Static, Label, Button, Input, Log
+from textual.widgets import Static, Label, Button, Input, Log, ListView, ListItem
 from textual import on
 from typing import List
 
@@ -16,6 +16,10 @@ class AdvancedView(Vertical):
                 yield Button("Scan Library", id="btn-adv-scan", variant="primary")
 
             yield Static("", id="adv-status-line", classes="advanced-status")
+
+            with Vertical(id="adv-matched-container", classes="advanced-scroll-box"):
+                yield Label("MATCHED TITLES", classes="advanced-sub-label")
+                yield ListView(id="adv-matched-list")
 
             with Horizontal(classes="advanced-row", id="adv-actions-row"):
                 yield Button("Mass Delete", id="btn-adv-delete", variant="error", disabled=True)
@@ -39,6 +43,9 @@ class AdvancedView(Vertical):
         status = self.query_one("#adv-status-line", Static)
         status.update("[yellow]Fetching list and mapping library...[/]")
         
+        matched_list = self.query_one("#adv-matched-list", ListView)
+        matched_list.clear()
+
         # 1. Fetch Mdblist
         mdb_items, mdb_err = await self.app.api.get_mdblist_items(val)
         if mdb_err:
@@ -54,40 +61,45 @@ class AdvancedView(Vertical):
 
         library_items = lib_resp.get("items", [])
         
-        # 3. Build Multi-ID Lookup Map
+        # 3. Build Multi-ID Lookup Map (Including Title)
         riven_map = {}
         for item in library_items:
             rid = item.get("id")
             itype = item.get("type")
+            title = item.get("title", "Unknown")
+            
+            entry = {"id": rid, "title": title}
             
             # Map TMDB
             tmdb = item.get("tmdb_id") or (item.get("parent_ids") or {}).get("tmdb_id")
-            if tmdb: riven_map[(itype, "tmdb", str(tmdb))] = rid
+            if tmdb: riven_map[(itype, "tmdb", str(tmdb))] = entry
             
             # Map TVDB
             tvdb = item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id")
-            if tvdb: riven_map[(itype, "tvdb", str(tvdb))] = rid
+            if tvdb: riven_map[(itype, "tvdb", str(tvdb))] = entry
 
             # Map IMDB (Crucial for Movies)
             imdb = item.get("imdb_id") or (item.get("parent_ids") or {}).get("imdb_id")
-            if imdb: riven_map[(itype, "imdb", str(imdb))] = rid
+            if imdb: riven_map[(itype, "imdb", str(imdb))] = entry
 
         # 4. Cross-Reference using multiple fallback IDs
         self.matched_ids = []
         unique_matches = set()
+        matched_titles = []
         
+        def add_match(entry):
+            if entry["id"] not in unique_matches:
+                unique_matches.add(entry["id"])
+                self.matched_ids.append(str(entry["id"]))
+                matched_titles.append(entry["title"])
+
         # Process Movies
         for m in mdb_items.get("movies", []):
             m_id = str(m.get("id")) # Usually TMDB
             m_imdb = str(m.get("imdb_id"))
             
-            match_id = None
-            if ("movie", "tmdb", m_id) in riven_map: match_id = riven_map[("movie", "tmdb", m_id)]
-            elif ("movie", "imdb", m_imdb) in riven_map: match_id = riven_map[("movie", "imdb", m_imdb)]
-            
-            if match_id and match_id not in unique_matches:
-                self.matched_ids.append(str(match_id))
-                unique_matches.add(match_id)
+            if ("movie", "tmdb", m_id) in riven_map: add_match(riven_map[("movie", "tmdb", m_id)])
+            elif ("movie", "imdb", m_imdb) in riven_map: add_match(riven_map[("movie", "imdb", m_imdb)])
 
         # Process Shows
         for s in mdb_items.get("shows", []):
@@ -95,19 +107,17 @@ class AdvancedView(Vertical):
             s_imdb = str(s.get("imdb_id"))
             s_id = str(s.get("id"))
             
-            match_id = None
-            if ("show", "tvdb", s_tvdb) in riven_map: match_id = riven_map[("show", "tvdb", s_tvdb)]
-            elif ("show", "imdb", s_imdb) in riven_map: match_id = riven_map[("show", "imdb", s_imdb)]
-            elif ("show", "tmdb", s_id) in riven_map: match_id = riven_map[("show", "tmdb", s_id)]
-            
-            if match_id and match_id not in unique_matches:
-                self.matched_ids.append(str(match_id))
-                unique_matches.add(match_id)
+            if ("show", "tvdb", s_tvdb) in riven_map: add_match(riven_map[("show", "tvdb", s_tvdb)])
+            elif ("show", "imdb", s_imdb) in riven_map: add_match(riven_map[("show", "imdb", s_imdb)])
+            elif ("show", "tmdb", s_id) in riven_map: add_match(riven_map[("show", "tmdb", s_id)])
 
         # 5. Update UI
         count = len(self.matched_ids)
         status.update(f"[green]Scan Complete: Found {count} matches in your library.[/]")
         
+        for title in sorted(matched_titles):
+            matched_list.append(ListItem(Label(title)))
+
         has_matches = count > 0
         self.query_one("#btn-adv-delete", Button).disabled = not has_matches
         self.query_one("#btn-adv-reset", Button).disabled = not has_matches
@@ -117,7 +127,10 @@ class AdvancedView(Vertical):
         if not self.matched_ids: return
         
         status = self.query_one("#adv-status-line", Static)
-        status.update(f"[yellow]Executing bulk {action} on {len(self.matched_ids)} items...[/]")
+        status.update(f"[yellow]Sending {len(self.matched_ids)} IDs to Riven...[/]")
+        
+        # Log to the internal app log too
+        self.app.log_message(f"Advanced: Executing {action} on IDs: {self.matched_ids}")
         
         api_key = self.app.settings.get("api_key")
         success, msg = await self.app.api.bulk_action(action, self.matched_ids, api_key)
