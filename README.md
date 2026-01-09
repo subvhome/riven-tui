@@ -11,6 +11,7 @@ Built for those who prefer staying in the shell, this TUI provides a visual way 
 - **Central Dashboard**: A single view for library statistics (movies/shows), system health, and a feed of recently added media.
 - **Library Analytics**: Custom Unicode-based bar charts for tracking your library state distribution.
 - **Discovery**: Integrated TMDB trending lists with a "Quick Add" feature to send content to Riven instantly.
+- **Advanced Management**: Mass-action suite for library maintenance. Scan external lists (like Mdblist) and bulk Delete, Reset, or Retry items in your library.
 - **Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping.
 - **Posters & Visuals**: High-resolution poster rendering using `chafa`.
 - **Live Logs**: Integrated log viewer for the Riven backend.
@@ -38,6 +39,15 @@ curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh |
 | Calendar |
 | :---: |
 | ![Calendar](assets/calendar.jpg) |
+
+## ⚙️ Advanced Features
+
+### Mass List Management
+The Advanced tab allows you to cross-reference your Riven library with external lists (e.g., Mdblist).
+- **Scan**: Paste a list ID or URL to find matching items in your library.
+- **Mass Action**: Delete, Reset, or Retry all matched items in a single batch.
+
+> **Note**: If you delete content that exists in other active lists (like Overseerr or Trakt), Riven may automatically re-trigger the request and redownload the content. Monitor your Riven backend logs to ensure items are removed as expected.
 
 ## Configuration
 
