@@ -46,7 +46,7 @@ class SettingsView(Container):
     async def load_schema(self) -> None:
         if not hasattr(self.app, "api"):
             return
-        resp, err = await self.app.api.get_schema(self.app.settings.get("api_key"))
+        resp, err = await self.app.api.get_schema(self.app.settings.get("riven_key"))
         if not err and resp:
             # Store the entire schema response
             self.schema_data = resp
@@ -255,7 +255,7 @@ class SettingsView(Container):
         # 4. Call API with ONLY the payload (delta)
         self.app.notify("Saving changes...")
         self.app.log_message(f"Settings View: Saving delta: {payload}")
-        resp, err = await self.app.api.update_settings(payload, self.app.settings.get("api_key"))
+        resp, err = await self.app.api.update_settings(payload, self.app.settings.get("riven_key"))
         
         if err:
             self.app.notify(f"Error: {err}", severity="error")
@@ -273,7 +273,7 @@ class SettingsView(Container):
         if not hasattr(self.app, "api"): return
 
         await self.load_schema()
-        resp, err = await self.app.api.get_settings(self.app.settings.get("api_key"))
+        resp, err = await self.app.api.get_settings(self.app.settings.get("riven_key"))
         
         if resp:
             self.settings_data = resp

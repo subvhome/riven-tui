@@ -31,6 +31,9 @@ class TrendingPageChanged(Message):
         super().__init__()
         self.delta = delta
 
+class RefreshSystemStatus(Message):
+    pass
+
 class DashboardView(Vertical):
     def compose(self) -> ComposeResult:
         with Vertical(id="dashboard-content-wrapper"):
@@ -54,7 +57,9 @@ class DashboardView(Vertical):
                     yield ListView(id="list-trending")
 
                 with Vertical(id="dashboard-status-col", classes="dashboard-column"):
-                    yield Label("SYSTEM STATUS", classes="dashboard-section-title")
+                    with Horizontal(classes="dashboard-section-header-row"):
+                        yield Label("SYSTEM STATUS", classes="dashboard-section-title")
+                        yield Button("↻", id="btn-refresh-status", classes="dashboard-nav-btn")
                     yield Label("──────────────", classes="dashboard-section-sep")
                     with Vertical(id="status-items-container"):
                         pass
@@ -148,6 +153,10 @@ class DashboardView(Vertical):
             li.item_data = item
             li.source_type = "tmdb"
             lv.append(li)
+
+    @on(Button.Pressed, "#btn-refresh-status")
+    def on_refresh_status(self):
+        self.post_message(RefreshSystemStatus())
 
     @on(Button.Pressed, "#btn-trending-prev")
     def on_prev_page(self):

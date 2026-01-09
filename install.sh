@@ -73,9 +73,7 @@ pip install -r requirements.txt > /dev/null
 
 echo -e "\n${BLUE}--- Configuration Wizard ---${NC}"
 
-
 echo -e "Let's set up your settings. Press Enter to use defaults.\n"
-
 
 
 
@@ -89,58 +87,51 @@ read TMDB_TOKEN < /dev/tty
 
 
 
-
 echo -e "\n${BLUE}Backend Configuration (Riven API)${NC}"
-
 
 echo -n "Backend Protocol [http]: "
 
 read RIVEN_PROTO < /dev/tty
-RIVEN_PROTO=${RIVEN_PROTO:-http}
 
+RIVEN_PROTO=${RIVEN_PROTO:-http}
 
 echo -n "Backend Host [localhost]: "
 
 read RIVEN_HOST < /dev/tty
-RIVEN_HOST=${RIVEN_HOST:-localhost}
 
+RIVEN_HOST=${RIVEN_HOST:-localhost}
 
 echo -n "Backend Port [8080]: "
 
 read RIVEN_PORT < /dev/tty
+
 RIVEN_PORT=${RIVEN_PORT:-8080}
-
-
 
 
 
 echo -e "\n${BLUE}Frontend Configuration (Riven UI)${NC}"
 
-
 echo -n "Frontend Protocol [http]: "
 
 read FE_PROTO < /dev/tty
-FE_PROTO=${FE_PROTO:-http}
 
+FE_PROTO=${FE_PROTO:-http}
 
 echo -n "Frontend Host [localhost]: "
 
 read FE_HOST < /dev/tty
-FE_HOST=${FE_HOST:-localhost}
 
+FE_HOST=${FE_HOST:-localhost}
 
 echo -n "Frontend Port [3000]: "
 
 read FE_PORT < /dev/tty
+
 FE_PORT=${FE_PORT:-3000}
 
 
 
-
-
-
 echo -e "\n${BLUE}Advanced Settings${NC}"
-
 
 echo -n "Request Timeout (seconds) [30.0]: "
 
@@ -152,95 +143,55 @@ echo -n "Log Display Limit (lines) [50]: "
 
 read LOG_LIMIT < /dev/tty
 
-
 LOG_LIMIT=${LOG_LIMIT:-50}
-
-
 
 
 
 # Create settings.json
 
-
 cat > settings.json <<EOF
 
 {
 
-
-
-    "api_key": "$RIVEN_API_KEY",
-
-
+    "riven_key": "$RIVEN_API_KEY",
 
     "tmdb_bearer_token": "$TMDB_TOKEN",
 
-
-
     "be_config": {
-
-
 
         "protocol": "$RIVEN_PROTO",
 
-
-
         "host": "$RIVEN_HOST",
-
-
 
         "port": $RIVEN_PORT
 
-
-
     },
-
-
 
     "fe_config": {
 
-
-
         "protocol": "$FE_PROTO",
-
-
 
         "host": "$FE_HOST",
 
-
-
         "port": $FE_PORT
-
-
 
     },
 
-
-
     "request_timeout": $REQ_TIMEOUT,
-
-
 
     "tui_debug": false,
 
-
-
     "log_display_limit": $LOG_LIMIT,
-
-
 
     "log_tailing_enabled": true,
 
-
-
     "chafa_max_width": 100
-
-
 
 }
 
-
-
 EOF
+
+
 
 # Post-process to remove all blank lines from the generated JSON
 sed -i '/^$/d' settings.json

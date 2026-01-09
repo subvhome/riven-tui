@@ -1,14 +1,16 @@
 #!/bin/bash
 
 # Riven TUI - Release Automation Script
-# Usage: ./release.sh 1.2.0
+# Usage: ./release.sh <version> "your message here"
 
 if [ -z "$1" ]; then
-    echo "Usage: ./release.sh <version_number> (e.g., 1.2.0)"
+    echo "Usage: ./release.sh <version_number> [message]"
     exit 1
 fi
 
 NEW_VERSION=$1
+# Use second argument as message, or default if empty
+RELEASE_MSG=${2:-"Release v$NEW_VERSION"}
 
 # 1. Update version.py
 echo "Updating version.py to $NEW_VERSION..."
@@ -19,10 +21,10 @@ echo "Staging changes..."
 git add .
 
 echo "Committing..."
-git commit -m "chore: release v$NEW_VERSION"
+git commit -m "chore: release v$NEW_VERSION - $RELEASE_MSG"
 
 echo "Tagging..."
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+git tag -a "v$NEW_VERSION" -m "$RELEASE_MSG"
 
 echo "Pushing to GitHub..."
 git push origin main

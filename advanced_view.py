@@ -53,10 +53,13 @@ class AdvancedView(Vertical):
             return
 
         # 2. Big Gulp - Fetch whole library index
-        api_key = self.app.settings.get("api_key")
-        lib_resp, lib_err = await self.app.api.get_items(api_key, limit=999999, extended=False)
-        if lib_err:
-            status.update(f"[red]Riven Error: {lib_err}[/]")
+        riven_key = self.app.settings.get("riven_key")
+        lib_resp, lib_err = await self.app.api.get_items(riven_key, limit=999999, extended=False)
+        
+        if lib_err or lib_resp is None:
+            error_msg = lib_err or "Unknown API Error (No data returned from Riven)"
+            status.update(f"[red]Riven Error: {error_msg}[/]")
+            self.query_one("#btn-adv-scan", Button).disabled = False
             return
 
         library_items = lib_resp.get("items", [])
@@ -132,8 +135,8 @@ class AdvancedView(Vertical):
         # Log to the internal app log too
         self.app.log_message(f"Advanced: Executing {action} on IDs: {self.matched_ids}")
         
-        api_key = self.app.settings.get("api_key")
-        success, msg = await self.app.api.bulk_action(action, self.matched_ids, api_key)
+        riven_key = self.app.settings.get("riven_key")
+        success, msg = await self.app.api.bulk_action(action, self.matched_ids, riven_key)
         
         if success:
             status.update(f"[bold green]Success: Bulk {action} completed for {len(self.matched_ids)} items.[/]")
