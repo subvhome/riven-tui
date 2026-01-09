@@ -41,15 +41,28 @@ class RivenAPI:
     async def bulk_action(self, action: str, item_ids: List[str], api_key: str):
         # action: remove, reset, retry
         url = f"{self.be_base_url}/api/v1/items/{action}"
-        headers = {"x-api-key": api_key}
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "accept": "*/*"
+        }
         data = {"ids": item_ids}
         method = "DELETE" if action == "remove" else "POST"
         
+        self.logger.info(f"BULK_ACTION_START: {method} {url} | IDS: {item_ids}")
+        
         try:
             resp = await self.client.request(method, url, headers=headers, json=data)
-            return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}")
+            self.logger.info(f"BULK_ACTION_RESPONSE: Status {resp.status_code} | Body: {resp.text}")
+            
+            # The remove/retry endpoints often return 200 even if some IDs fail
+            if resp.status_code == 200:
+                return True, resp.json()
+            else:
+                return False, f"Status: {resp.status_code}, Body: {resp.text}"
         except Exception as e:
-            return (False, str(e))
+            self.logger.error(f"BULK_ACTION_EXCEPTION: {e}")
+            return False, str(e)
 
     async def get_item_by_id(self, media_type: str, media_id: str, api_key: str):
         url = f"{self.be_base_url}/api/v1/items/{media_id}"
