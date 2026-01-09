@@ -822,7 +822,9 @@ class RivenTUI(App):
 
     async def check_for_updates(self):
         """Checks GitHub for a newer version string."""
-        url = "https://raw.githubusercontent.com/subvhome/riven-tui/main/version.py"
+        import time
+        # Add a timestamp to bypass GitHub's CDN cache
+        url = f"https://raw.githubusercontent.com/subvhome/riven-tui/main/version.py?t={int(time.time())}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(url)
@@ -832,7 +834,12 @@ class RivenTUI(App):
                     match = re.search(r'VERSION\s*=\s*"([^"]+)"', remote_content)
                     if match:
                         remote_version = match.group(1)
-                        if remote_version != VERSION:
+                        
+                        # Proper SemVer comparison: only update if remote > local
+                        def version_tuple(v):
+                            return tuple(map(int, (v.split("."))))
+                        
+                        if version_tuple(remote_version) > version_tuple(VERSION):
                             self.push_screen(UpdateScreen(remote_version))
                             self.log_message(f"Update found: Local {VERSION} vs Remote {remote_version}")
         except Exception as e:
