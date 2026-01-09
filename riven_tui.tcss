@@ -329,6 +329,50 @@ ListItem {
     padding: 1;
 }
 
+#update-container {
+    width: 60;
+    height: auto;
+    padding: 2;
+    background: #1A1A2E;
+    border: double #BE95C4;
+}
+
+#update-title {
+    text-align: center;
+    text-style: bold;
+    color: #F4D35E;
+    margin-bottom: 1;
+}
+
+#update-message {
+    text-align: center;
+    margin-bottom: 2;
+}
+
+#update-progress-container {
+    align: center middle;
+    margin-bottom: 1;
+}
+
+#update-bar {
+    width: 100%;
+    margin: 1 0;
+}
+
+#update-details {
+    text-align: center;
+    height: 3;
+}
+
+#update-buttons {
+    height: 3;
+    align: center middle;
+}
+
+#update-buttons Button {
+    margin: 0 2;
+}
+
 #chafa-check-container {
     align: center middle;
 }

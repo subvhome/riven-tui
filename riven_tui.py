@@ -30,6 +30,84 @@ import httpx
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
 
+from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Label, Button, Log, Markdown, Select, Checkbox, ProgressBar
+from textual.containers import Container, Horizontal, Vertical
+from textual.message import Message
+from textual.css.query import NoMatches
+from textual.screen import ModalScreen
+from textual.reactive import reactive
+from textual.timer import Timer
+from rich.text import Text
+import rich.markup
+from rich.markup import escape
+
+from api import RivenAPI
+from settings_view import SettingsView
+from dashboard_view import DashboardView, DashboardItemClicked, TrendingPageChanged, RefreshSystemStatus
+from advanced_view import AdvancedView
+from version import VERSION
+import subprocess
+import httpx
+
+class UpdateScreen(ModalScreen[bool]):
+    def __init__(self, remote_version: str, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
+        super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
+        self.remote_version = remote_version
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="update-container", classes="modal-popup"):
+            yield Static("✨ New Update Available", id="update-title")
+            yield Static(f"Version [bold]{self.remote_version}[/bold] is now available.\n(Current: {VERSION})\n\nWould you like to update now?", id="update-message")
+            
+            with Vertical(id="update-progress-container", display=False):
+                yield Label("Updating files...")
+                yield ProgressBar(total=100, id="update-bar")
+                yield Static("", id="update-details")
+
+            with Horizontal(id="update-buttons"):
+                yield Button("Update Now", id="btn-update-confirm", variant="success")
+                yield Button("Later", id="btn-update-cancel")
+
+    @on(Button.Pressed, "#btn-update-confirm")
+    async def on_confirm(self) -> None:
+        self.query_one("#update-buttons").display = False
+        self.query_one("#update-progress-container").display = True
+        self.run_worker(self.perform_git_pull())
+
+    @on(Button.Pressed, "#btn-update-cancel")
+    def on_cancel(self) -> None:
+        self.dismiss(False)
+
+    async def perform_git_pull(self):
+        bar = self.query_one("#update-bar", ProgressBar)
+        details = self.query_one("#update-details", Static)
+        
+        try:
+            # We use a sequence of git commands to simulate progress
+            steps = [
+                ("Fetching...", ["git", "fetch"]),
+                ("Pulling...", ["git", "pull"]),
+            ]
+            
+            for i, (msg, cmd) in enumerate(steps):
+                details.update(f"[yellow]{msg}[/]")
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                await process.communicate()
+                bar.advance(50)
+
+            details.update("[bold green]Update successful![/]\n[cyan]The application will now exit.\nPlease relaunch to use the new version.[/]")
+            await asyncio.sleep(3)
+            self.app.exit()
+            
+        except Exception as e:
+            details.update(f"[red]Update failed: {e}[/]")
+            await asyncio.sleep(3)
+            self.dismiss(False)
+
 class ScrapeLogScreen(ModalScreen):
     def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
@@ -741,14 +819,13 @@ class RivenTUI(App):
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
-                    # Extract VERSION = "X.Y.Z" from the file content
                     remote_content = resp.text
                     import re
                     match = re.search(r'VERSION\s*=\s*"([^"]+)"', remote_content)
                     if match:
                         remote_version = match.group(1)
                         if remote_version != VERSION:
-                            self.notify(f"✨ New Update Available: v{remote_version}! Run git pull to update.", severity="information", timeout=10)
+                            self.push_screen(UpdateScreen(remote_version))
                             self.log_message(f"Update found: Local {VERSION} vs Remote {remote_version}")
         except Exception as e:
             self.log_message(f"Update check failed: {e}")
