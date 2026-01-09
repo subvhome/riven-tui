@@ -1,4 +1,8 @@
 /* General */
+.hidden {
+    display: none;
+}
+
 Screen, App {
     background: #1A1A2E;
     color: #F0F0F0;

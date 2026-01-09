@@ -59,7 +59,7 @@ class UpdateScreen(ModalScreen[bool]):
             yield Static("✨ New Update Available", id="update-title")
             yield Static(f"Version [bold]{self.remote_version}[/bold] is now available.\n(Current: {VERSION})\n\nWould you like to update now?", id="update-message")
             
-            with Vertical(id="update-progress-container", display=False):
+            with Vertical(id="update-progress-container", classes="hidden"):
                 yield Label("Updating files...")
                 yield ProgressBar(total=100, id="update-bar")
                 yield Static("", id="update-details")
@@ -71,7 +71,8 @@ class UpdateScreen(ModalScreen[bool]):
     @on(Button.Pressed, "#btn-update-confirm")
     async def on_confirm(self) -> None:
         self.query_one("#update-buttons").display = False
-        self.query_one("#update-progress-container").display = True
+        container = self.query_one("#update-progress-container")
+        container.remove_class("hidden")
         self.run_worker(self.perform_git_pull())
 
     @on(Button.Pressed, "#btn-update-cancel")
