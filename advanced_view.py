@@ -3,6 +3,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static, Label, Button, Input, Log, ListView, ListItem
 from textual import on
 from typing import List
+import asyncio
 
 class AdvancedView(Vertical):
     matched_ids: List[str] = []
@@ -41,7 +42,7 @@ class AdvancedView(Vertical):
             return
 
         status = self.query_one("#adv-status-line", Static)
-        status.update("[yellow]Fetching list and mapping library...[/]")
+        status.update("[yellow]Fetching list from Mdblist...[/]")
         self.app.log_message(f"Advanced: Starting scan for {val}")
         
         matched_list = self.query_one("#adv-matched-list", ListView)
@@ -54,73 +55,60 @@ class AdvancedView(Vertical):
             self.app.log_message(f"Advanced: Mdblist Error: {mdb_err}")
             return
 
-        self.app.log_message(f"Advanced: Mdblist returned {len(mdb_items.get('movies', [])) + len(mdb_items.get('shows', []))} items.")
-
-        # 2. Big Gulp - Fetch whole library index
-        riven_key = self.app.settings.get("riven_key")
-        self.app.log_message("Advanced: Requesting full Riven library index...")
-        lib_resp, lib_err = await self.app.api.get_items(riven_key, limit=999999, extended=False)
+        all_mdb_items = mdb_items.get("movies", []) + mdb_items.get("shows", [])
+        self.app.log_message(f"Advanced: Mdblist returned {len(all_mdb_items)} items.")
         
-        if lib_err or lib_resp is None:
-            error_msg = lib_err or "Unknown API Error (No data returned from Riven)"
-            status.update(f"[red]Riven Error: {error_msg}[/]")
-            self.app.log_message(f"Advanced: Riven Fetch Error: {error_msg}")
-            self.query_one("#btn-adv-scan", Button).disabled = False
+        if not all_mdb_items:
+            status.update("[yellow]Mdblist is empty or not yet populated.[/]")
             return
 
-        library_items = lib_resp.get("items", [])
-        
-        # 3. Build Multi-ID Lookup Map (Including Title)
-        riven_map = {}
-        for item in library_items:
-            rid = item.get("id")
-            itype = item.get("type")
-            title = item.get("title", "Unknown")
-            
-            entry = {"id": rid, "title": title}
-            
-            # Map TMDB
-            tmdb = item.get("tmdb_id") or (item.get("parent_ids") or {}).get("tmdb_id")
-            if tmdb: riven_map[(itype, "tmdb", str(tmdb))] = entry
-            
-            # Map TVDB
-            tvdb = item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id")
-            if tvdb: riven_map[(itype, "tvdb", str(tvdb))] = entry
-
-            # Map IMDB (Crucial for Movies)
-            imdb = item.get("imdb_id") or (item.get("parent_ids") or {}).get("imdb_id")
-            if imdb: riven_map[(itype, "imdb", str(imdb))] = entry
-
-        # 4. Cross-Reference using multiple fallback IDs
+        # 2. Surgical Probing - Query Riven for each specific ID in parallel
+        status.update(f"[yellow]Surgically probing Riven for {len(all_mdb_items)} items...[/]")
+        riven_key = self.app.settings.get("riven_key")
         self.matched_ids = []
-        unique_matches = set()
         matched_titles = []
         
-        def add_match(entry):
-            if entry["id"] not in unique_matches:
-                unique_matches.add(entry["id"])
-                self.matched_ids.append(str(entry["id"]))
-                matched_titles.append(entry["title"])
+        # Concurrency control
+        semaphore = asyncio.Semaphore(10)
 
-        # Process Movies
+        async def probe_movie(m):
+            imdb_id = m.get("imdb_id")
+            if not imdb_id: return None
+            async with semaphore:
+                resp, err = await self.app.api.get_items(riven_key, search=imdb_id, limit=1)
+                if resp and resp.get("total_items", 0) > 0:
+                    return resp["items"][0]
+            return None
+
+        async def probe_show(s):
+            tvdb_id = s.get("tvdb_id")
+            if not tvdb_id: return None
+            async with semaphore:
+                # Search by TVDB ID
+                resp, err = await self.app.api.get_items(riven_key, search=str(tvdb_id), limit=1)
+                if resp and resp.get("total_items", 0) > 0:
+                    return resp["items"][0]
+            return None
+
+        # Create specific tasks for movies and shows
+        tasks = []
         for m in mdb_items.get("movies", []):
-            m_id = str(m.get("id")) # Usually TMDB
-            m_imdb = str(m.get("imdb_id"))
-            
-            if ("movie", "tmdb", m_id) in riven_map: add_match(riven_map[("movie", "tmdb", m_id)])
-            elif ("movie", "imdb", m_imdb) in riven_map: add_match(riven_map[("movie", "imdb", m_imdb)])
-
-        # Process Shows
+            tasks.append(probe_movie(m))
         for s in mdb_items.get("shows", []):
-            s_tvdb = str(s.get("tvdb_id"))
-            s_imdb = str(s.get("imdb_id"))
-            s_id = str(s.get("id"))
-            
-            if ("show", "tvdb", s_tvdb) in riven_map: add_match(riven_map[("show", "tvdb", s_tvdb)])
-            elif ("show", "imdb", s_imdb) in riven_map: add_match(riven_map[("show", "imdb", s_imdb)])
-            elif ("show", "tmdb", s_id) in riven_map: add_match(riven_map[("show", "tmdb", s_id)])
+            tasks.append(probe_show(s))
 
-        # 5. Update UI
+        # Execute all probes in parallel
+        results = await asyncio.gather(*tasks)
+
+        # 3. Process Results
+        unique_matches = set()
+        for item in results:
+            if item and item.get("id") not in unique_matches:
+                self.matched_ids.append(str(item["id"]))
+                unique_matches.add(item["id"])
+                matched_titles.append(item.get("title", "Unknown"))
+
+        # 4. Update UI
         count = len(self.matched_ids)
         status.update(f"[green]Scan Complete: Found {count} matches in your library.[/]")
         
@@ -138,7 +126,6 @@ class AdvancedView(Vertical):
         status = self.query_one("#adv-status-line", Static)
         status.update(f"[yellow]Sending {len(self.matched_ids)} IDs to Riven...[/]")
         
-        # Log to the internal app log too
         self.app.log_message(f"Advanced: Executing {action} on IDs: {self.matched_ids}")
         
         riven_key = self.app.settings.get("riven_key")
@@ -150,6 +137,7 @@ class AdvancedView(Vertical):
             self.query_one("#btn-adv-delete", Button).disabled = True
             self.query_one("#btn-adv-reset", Button).disabled = True
             self.query_one("#btn-adv-retry", Button).disabled = True
+            self.query_one("#adv-matched-list", ListView).clear()
         else:
             status.update(f"[red]Action failed: {msg}[/]")
 
