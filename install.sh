@@ -14,8 +14,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}=========================================="
 echo -e "      🚀 Welcome to the Riven TUI Setup"
-echo -e "==========================================${NC}
-"
+echo -e "==========================================${NC}"
 
 # 1. Dependency Checks
 echo -e "${YELLOW}[1/6] Checking system requirements...${NC}"
@@ -77,6 +76,7 @@ echo -e "Let's set up your settings. Press Enter to use defaults.\n"
 
 
 
+
 echo -n "Riven API Key: "
 
 read RIVEN_API_KEY < /dev/tty
@@ -84,6 +84,7 @@ read RIVEN_API_KEY < /dev/tty
 echo -n "TMDB Bearer Token: "
 
 read TMDB_TOKEN < /dev/tty
+
 
 
 
@@ -109,7 +110,9 @@ RIVEN_PORT=${RIVEN_PORT:-8080}
 
 
 
+
 echo -e "\n${BLUE}Frontend Configuration (Riven UI)${NC}"
+
 
 echo -n "Frontend Protocol [http]: "
 
@@ -131,7 +134,9 @@ FE_PORT=${FE_PORT:-3000}
 
 
 
+
 echo -e "\n${BLUE}Advanced Settings${NC}"
+
 
 echo -n "Request Timeout (seconds) [30.0]: "
 
@@ -208,11 +213,14 @@ if ! command -v chafa &> /dev/null; then
 
 
 
+
 echo -e "\n${YELLOW}[5/6] Chafa (for poster art) not found.${NC}"
 
 
 
+
 echo -n "Would you like to try installing chafa? (Requires sudo) [Y/n]: "
+
 
 
 
@@ -302,8 +310,7 @@ fi
 
 
 
-# 7. Final Polish (Alias/Launch Script)
-
+# 7. Final Polish (Alias/Launch Script) 
 
 echo -e "${YELLOW}[6/6] Finishing up...${NC}"
 
@@ -313,19 +320,12 @@ echo -e "${YELLOW}[6/6] Finishing up...${NC}"
 
 # Create a local runner script
 
-
 cat > run.sh <<EOF
-
 #!/bin/bash
-
 cd "$INSTALL_DIR"
-
 source .venv/bin/activate
-
 python3 riven_tui.py
-
 EOF
-
 chmod +x run.sh
 
 
@@ -339,15 +339,19 @@ echo -e "\n${BLUE}==========================================${NC}"
 
 echo -e "${GREEN}      Riven TUI is ready to go!${NC}"
 
+
 echo -e "${BLUE}==========================================${NC}"
 
 echo -e "You can start the app by running:"
 
-echo -e "${YELLOW}cd $INSTALL_DIR && ./run.sh${NC}\n"
+
+echo -e "${YELLOW}cd $INSTALL_DIR && ./run.sh${NC}
+"
 
 
 
 echo -n "Would you like to add a 'riven-tui' alias to your shell profile? [y/N]: "
+
 
 
 
@@ -377,7 +381,6 @@ if [[ $ADD_ALIAS =~ ^[Yy]$ ]]; then
 
 
     fi
-
 
 
 
