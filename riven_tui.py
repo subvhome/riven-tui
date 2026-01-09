@@ -84,10 +84,11 @@ class UpdateScreen(ModalScreen[bool]):
         details = self.query_one("#update-details", Static)
         
         try:
-            # We use a sequence of git commands to simulate progress
+            # We use a sequence of git commands to ensure a clean update
             steps = [
-                ("Fetching...", ["git", "fetch"]),
-                ("Pulling...", ["git", "pull"]),
+                ("Fetching...", ["git", "fetch", "--all"]),
+                ("Resetting...", ["git", "reset", "--hard", "origin/main"]),
+                ("Pulling...", ["git", "pull", "origin", "main"]),
             ]
             
             for i, (msg, cmd) in enumerate(steps):
@@ -97,16 +98,22 @@ class UpdateScreen(ModalScreen[bool]):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )
-                await process.communicate()
-                bar.advance(50)
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode != 0:
+                    raise Exception(stderr.decode().strip())
+                
+                # Advance bar proportionally (33% per step)
+                bar.advance(33.3)
 
             details.update("[bold green]Update successful![/]\n[cyan]The application will now exit.\nPlease relaunch to use the new version.[/]")
             await asyncio.sleep(3)
             self.app.exit()
             
         except Exception as e:
+            self.app.log_message(f"Update Error: {e}")
             details.update(f"[red]Update failed: {e}[/]")
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)
             self.dismiss(False)
 
 class ScrapeLogScreen(ModalScreen):
