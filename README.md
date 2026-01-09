@@ -24,6 +24,19 @@ The easiest way to get set up is the interactive install script. It handles the 
 curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh | bash
 ```
 
+## Running the application
+
+If you used the **Quick Install** script above, you can start the TUI in two ways:
+
+1.  **Directly**: Navigate to your installation folder and run the provided script:
+    ```bash
+    ./run.sh
+    ```
+2.  **Via Alias**: If you opted to add an alias during installation, simply type:
+    ```bash
+    riven-tui
+    ```
+
 ### Manual Setup
 1. Clone the repo: `git clone https://github.com/subvhome/riven-tui.git`
 2. Create a venv and install requirements: `pip install -r requirements.txt`
