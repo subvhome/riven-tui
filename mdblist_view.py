@@ -49,9 +49,9 @@ class MdblistView(Vertical):
         log.write_line(f"✅ Found {len(mdb_items)} items in Mdblist.")
         
         # 2. Fetch Riven Library
-        log.write_line("Downloading full Riven library index...")
+        log.write_line("Downloading full Riven library index (120s timeout)...")
         riven_key = self.app.settings.get("riven_key")
-        lib_resp, lib_err = await api.get_items(riven_key, limit=999999, extended=False)
+        lib_resp, lib_err = await api.get_items(riven_key, limit=999999, extended=False, timeout=120.0)
         
         if lib_err:
             log.write_line(f"Error fetching library: {lib_err}")

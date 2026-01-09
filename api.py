@@ -121,7 +121,7 @@ class RivenAPI:
         except Exception as e:
             return (False, str(e))
 
-    async def get_items(self, riven_key: str, limit: int = 50, page: int = 1, sort: Optional[str] = None, search: Optional[str] = None, extended: bool = False, count_only: bool = False, item_type: Optional[str] = None, states: Optional[List[str]] = None):
+    async def get_items(self, riven_key: str, limit: int = 50, page: int = 1, sort: Optional[str] = None, search: Optional[str] = None, extended: bool = False, count_only: bool = False, item_type: Optional[str] = None, states: Optional[List[str]] = None, timeout: Optional[float] = None):
         url = f"{self.be_base_url}/api/v1/items"
         headers = {"x-api-key": riven_key}
         params = {
@@ -142,7 +142,7 @@ class RivenAPI:
         self.logger.info(f"get_items: URL={url}, Params={params}, Headers={headers}")
 
         try:
-            resp = await self.client.get(url, headers=headers, params=params)
+            resp = await self.client.get(url, headers=headers, params=params, timeout=timeout)
             self.logger.info(f"get_items: Response status code: {resp.status_code}")
             if resp.status_code == 200:
                 return resp.json(), None
