@@ -42,6 +42,7 @@ class AdvancedView(Vertical):
 
         status = self.query_one("#adv-status-line", Static)
         status.update("[yellow]Fetching list and mapping library...[/]")
+        self.app.log_message(f"Advanced: Starting scan for {val}")
         
         matched_list = self.query_one("#adv-matched-list", ListView)
         matched_list.clear()
@@ -50,15 +51,20 @@ class AdvancedView(Vertical):
         mdb_items, mdb_err = await self.app.api.get_mdblist_items(val)
         if mdb_err:
             status.update(f"[red]Mdblist Error: {mdb_err}[/]")
+            self.app.log_message(f"Advanced: Mdblist Error: {mdb_err}")
             return
+
+        self.app.log_message(f"Advanced: Mdblist returned {len(mdb_items.get('movies', [])) + len(mdb_items.get('shows', []))} items.")
 
         # 2. Big Gulp - Fetch whole library index
         riven_key = self.app.settings.get("riven_key")
+        self.app.log_message("Advanced: Requesting full Riven library index...")
         lib_resp, lib_err = await self.app.api.get_items(riven_key, limit=999999, extended=False)
         
         if lib_err or lib_resp is None:
             error_msg = lib_err or "Unknown API Error (No data returned from Riven)"
             status.update(f"[red]Riven Error: {error_msg}[/]")
+            self.app.log_message(f"Advanced: Riven Fetch Error: {error_msg}")
             self.query_one("#btn-adv-scan", Button).disabled = False
             return
 

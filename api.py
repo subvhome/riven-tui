@@ -147,13 +147,22 @@ class RivenAPI:
             if resp.status_code == 200:
                 return resp.json(), None
             else:
-                return None, f"Status: {resp.status_code}, Body: {resp.text}"
+                err_msg = f"Status: {resp.status_code}, Body: {resp.text}"
+                self.logger.error(f"get_items: API Error: {err_msg}")
+                return None, err_msg
+        except httpx.TimeoutException as e:
+            err_msg = f"Request timed out after {self.client.timeout}"
+            self.logger.error(f"get_items: {err_msg} ({type(e).__name__})")
+            return None, err_msg
         except httpx.ConnectError as e:
-            self.logger.error(f"get_items: Connection error: {e}")
-            return None, f"Connection to {e.request.url} failed."
+            err_msg = f"Connection to {e.request.url} failed."
+            self.logger.error(f"get_items: {err_msg} ({type(e).__name__})")
+            return None, err_msg
         except Exception as e:
-            self.logger.error(f"get_items: Unexpected error: {e}")
-            return None, str(e)
+            # Use repr(e) to ensure we see the error even if str(e) is empty
+            err_msg = f"Unexpected error: {repr(e)}"
+            self.logger.error(f"get_items: {err_msg}")
+            return None, err_msg
 
 
     async def upload_logs(self, riven_key: str):
