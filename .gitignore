@@ -1,7 +1,8 @@
-# Secrets
-
-settings_structure.md
+# Secrets & Config
 settings.json
+settings.json.bak
+settings.json.tmp
+settings_structure.md
 
 # Logs
 *.log
@@ -10,7 +11,21 @@ settings.json
 __pycache__/
 .venv/
 *.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+build/
+dist/
+*.egg-info/
+
+# IDEs & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
 # Tooling
+.gemini/
 .geminiignore
-settings_structure.md

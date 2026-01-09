@@ -24,7 +24,9 @@ from api import RivenAPI
 from settings_view import SettingsView
 from dashboard_view import DashboardView, DashboardItemClicked, TrendingPageChanged
 from advanced_view import AdvancedView
+from version import VERSION
 import subprocess
+import httpx
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
 
@@ -731,6 +733,25 @@ class RivenTUI(App):
 
         yield Footer()
 
+    async def check_for_updates(self):
+        """Checks GitHub for a newer version string."""
+        url = "https://raw.githubusercontent.com/subvhome/riven-tui/main/version.py"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    # Extract VERSION = "X.Y.Z" from the file content
+                    remote_content = resp.text
+                    import re
+                    match = re.search(r'VERSION\s*=\s*"([^"]+)"', remote_content)
+                    if match:
+                        remote_version = match.group(1)
+                        if remote_version != VERSION:
+                            self.notify(f"✨ New Update Available: v{remote_version}! Run git pull to update.", severity="information", timeout=10)
+                            self.log_message(f"Update found: Local {VERSION} vs Remote {remote_version}")
+        except Exception as e:
+            self.log_message(f"Update check failed: {e}")
+
     async def on_mount(self) -> None:
         self.log_message("App mounted. Starting startup worker.")
         self.run_worker(self.perform_startup())
@@ -749,6 +770,8 @@ class RivenTUI(App):
             self.log_message(f"API Initialized: BE='{be_url}'")
             self.spinner = TitleSpinner(self, self.base_title) 
             self.app_state = "dashboard" 
+            # Run update check in background
+            self.run_worker(self.check_for_updates())
         except Exception as e:
             self.log_message(f"Config Error: {e}")
             self.notify(f"Config Error: {e}", severity="error")
