@@ -165,6 +165,17 @@ class RivenAPI:
             return None, err_msg
 
 
+    async def get_direct_logs(self, riven_key: str):
+        url = f"{self.be_base_url}/api/v1/logs"
+        headers = {"x-api-key": riven_key}
+        try:
+            resp = await self.client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp.json().get("logs", []), None
+            return None, f"Status: {resp.status_code}"
+        except Exception as e:
+            return None, str(e)
+
     async def upload_logs(self, riven_key: str):
         url = f"{self.be_base_url}/api/v1/upload_logs"
         headers = {"x-api-key": riven_key}

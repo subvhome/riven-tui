@@ -15,5 +15,6 @@
     "tmdb_bearer_token": "YOUR_TMDB_BEARER_TOKEN",
     "log_display_limit": 20,
     "log_tailing_enabled": true,
+    "log_refresh_interval": 5.0,
     "chafa_max_width": 120
 }

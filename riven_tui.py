@@ -30,7 +30,7 @@ import httpx
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
 
-from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Label, Button, Log, Markdown, Select, Checkbox, ProgressBar
+from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Label, Button, Log, Markdown, Select, Checkbox, ProgressBar, RichLog
 from textual.containers import Container, Horizontal, Vertical
 from textual.message import Message
 from textual.css.query import NoMatches
@@ -700,8 +700,37 @@ class MainContent(Vertical):
     async def display_logs(self, logs: str):
         container = self.query_one("#main-content-container")
         await container.query("*").remove()
-        await container.mount(Static(logs, id="log-content", expand=True))
-        await container.mount(Button("Refresh", id="btn-refresh-logs", variant="primary"))
+        
+        # Create the widgets and mount them directly
+        log_content = RichLog(id="log-content", auto_scroll=True, wrap=True)
+        refresh_btn = Button("Refresh", id="btn-refresh-logs", variant="primary")
+        auto_refresh_cb = Checkbox("Auto Refresh", id="cb-auto-refresh", value=False)
+        
+        # Create the containers
+        actions_bar = Horizontal(refresh_btn, auto_refresh_cb, id="log-actions-bar")
+        layout = Vertical(log_content, actions_bar, id="log-view-layout")
+        
+        await container.mount(layout)
+        
+        # Write the initial logs
+        log_content.write(logs)
+        
+    log_timer: Optional[Timer] = None
+
+    @on(Checkbox.Changed, "#cb-auto-refresh")
+    def on_auto_refresh_toggle(self, event: Checkbox.Changed) -> None:
+        refresh_btn = self.query_one("#btn-refresh-logs", Button)
+        refresh_btn.disabled = event.value
+        
+        if event.value:
+            interval = self.app.settings.get("log_refresh_interval", 5.0)
+            self.log_timer = self.set_interval(interval, self.app.refresh_logs)
+            self.app.log_message(f"Logs: Auto-refresh enabled (Interval: {interval}s)")
+        else:
+            if self.log_timer:
+                self.log_timer.stop()
+                self.log_timer = None
+            self.app.log_message("Logs: Auto-refresh disabled")
 
     async def display_json(self, data: dict):
         container = self.query_one("#main-content-container")
@@ -732,7 +761,7 @@ class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
 
     base_title = reactive("Riven TUI") 
-    app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced"] = reactive("dashboard")
+    app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced", "logs"] = reactive("dashboard")
     current_calendar_date = reactive(datetime.now())
     calendar_filters = reactive({"movie": True, "episode": True, "show": True, "season": True})
 
@@ -794,9 +823,9 @@ class RivenTUI(App):
             yield Button("Dashboard", id="btn-header-dashboard")
             yield Button("Search", id="btn-header-search")
             yield Button("Library", id="btn-header-library")
-            yield Button("Discover", id="btn-header-discover")
             yield Button("Advanced", id="btn-header-advanced")
             yield Button("Calendar", id="btn-header-calendar")
+            yield Button("Logs", id="btn-header-logs")
             yield Button("Settings", id="btn-header-settings")
             yield Static(self.base_title, id="header-title")
 
@@ -1022,6 +1051,11 @@ class RivenTUI(App):
             self.run_worker(self.refresh_dashboard())
         elif new_state == "advanced":
             advanced_view.display = True
+        elif new_state == "logs":
+            main_area.display = True
+            sidebar.display = False # Full screen logs
+            main_content.display = True
+            self.run_worker(self.show_initial_logs())
         elif new_state == "search":
             search_subheader.display = True
             main_area.display = True
@@ -1064,6 +1098,10 @@ class RivenTUI(App):
         sidebar.show_library_filters()
         
         await self.show_library_items(refresh_cache=True)
+
+    @on(Button.Pressed, "#btn-header-logs")
+    def on_logs_button_pressed(self) -> None:
+        self.app_state = "logs"
 
     @on(Button.Pressed, "#btn-header-advanced")
     def on_advanced_button_pressed(self) -> None:
@@ -1536,26 +1574,23 @@ class RivenTUI(App):
             self.app_state = "library"
 
     async def show_initial_logs(self):
-        self.log_message("Fetching initial logs...")
-        url, error = await self.api.upload_logs(self.settings.get("riven_key"))
+        self.log_message("Fetching direct logs...")
+        log_list, error = await self.api.get_direct_logs(self.settings.get("riven_key"))
+        
         if error:
-            if "[Errno -3]" in error:
-                self.notify("Error: DNS lookup failed. Check your internet connection.", severity="error")
-            else:
-                self.notify(f"Error uploading logs: {error}", severity="error")
-            self.log_message(f"Error uploading logs: {error}")
-            return
-
-        logs, error = await self.api.get_logs_from_url(url)
-        if error:
-            self.log_message(f"Error fetching logs from URL: {error}")
-            self.notify(f"Error fetching logs from URL: {error}", severity="error")
+            self.notify(f"Error fetching logs: {error}", severity="error")
             return
         
-        self.previous_logs = logs
+        # previous_logs_list tracks the full server response for diffing
+        self.previous_logs_list = log_list
         limit = self.settings.get("log_display_limit", 20)
-        log_lines = logs.splitlines()
-        display_logs = "\n".join(log_lines[-limit:])
+        
+        # Filter out noisy API logs from the display
+        filtered_list = [line for line in log_list if "GET /api/v1/logs" not in line]
+        
+        # displayed_logs_list tracks the subset currently shown in the TUI
+        self.displayed_logs_list = filtered_list[-limit:]
+        display_logs = "\n".join(self.displayed_logs_list)
         
         main_content = self.query_one(MainContent)
         await main_content.display_logs(display_logs)
@@ -1756,36 +1791,38 @@ class RivenTUI(App):
 
     @on(Button.Pressed, "#btn-refresh-logs")
     async def refresh_logs(self):
-        self.log_message("Refreshing logs...")
-        url, error = await self.api.upload_logs(self.settings.get("riven_key"))
+        self.log_message("Refreshing direct logs...")
+        new_log_list, error = await self.api.get_direct_logs(self.settings.get("riven_key"))
+        
         if error:
-            if "[Errno -3]" in error:
-                self.notify("Error: DNS lookup failed. Check your internet connection.", severity="error")
-            else:
-                self.notify(f"Error uploading logs: {error}", severity="error")
-            self.log_message(f"Error uploading logs: {error}")
-            return
-
-        logs, error = await self.api.get_logs_from_url(url)
-        if error:
-            self.log_message(f"Error fetching logs from URL: {error}")
-            self.notify(f"Error fetching logs from URL: {error}", severity="error")
+            self.notify(f"Error fetching logs: {error}", severity="error")
             return
         
-        if logs != self.previous_logs:
-            previous_lines = self.previous_logs.splitlines()
-            new_lines = logs.splitlines()
-            
-            diff = new_lines[len(previous_lines):]
+        # Diffing: Find new lines added since last check
+        prev_list = getattr(self, "previous_logs_list", [])
+        if new_log_list != prev_list:
+            prev_len = len(prev_list)
+            diff = new_log_list[prev_len:]
             
             if diff:
-                log_content = self.query_one("#log-content", Static)
-                current_content = log_content.render()
-                new_content = str(current_content) + "\n" + "\n".join(diff)
-                log_content.update(new_content)
+                # Update our anchor for the next server diff
+                self.previous_logs_list = new_log_list
 
-            self.previous_logs = logs
-            self.log_message("Logs refreshed with new content.")
+                # Filter the new lines before displaying
+                clean_diff = [line for line in diff if "GET /api/v1/logs" not in line]
+                
+                if clean_diff:
+                    if not hasattr(self, "displayed_logs_list"):
+                        self.displayed_logs_list = []
+                    
+                    self.displayed_logs_list.extend(clean_diff)
+                    
+                    # Use the native write() method to append only the new clean lines
+                    log_content = self.query_one("#log-content", RichLog)
+                    for line in clean_diff:
+                        log_content.write(line)
+                
+                self.log_message(f"Logs refreshed: {len(clean_diff)} new lines appended.")
         else:
             self.log_message("No new logs.")
             self.notify("No new logs.")

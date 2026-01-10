@@ -1,4 +1,8 @@
 /* General */
+* {
+    scrollbar-gutter: auto;
+}
+
 .hidden {
     display: none;
 }
@@ -6,6 +10,10 @@
 Screen, App {
     background: #1A1A2E;
     color: #F0F0F0;
+    scrollbar-size: 1 1;
+    scrollbar-color: #3D5A80;
+    scrollbar-color-hover: #BE95C4;
+    scrollbar-color-active: #F4D35E;
 }
 
 #header-bar, #search-subheader, #workspace, #main-area, #sidebar, #content-wrapper, #content-area {
@@ -139,12 +147,11 @@ Button {
 }
 
 #content-area {
-    background: #1A1A2E; 
-    padding: 2;
+    background: #1A1A2E;
+    padding: 0;
     height: 1fr;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
-    align-horizontal: left; /* Align children to the left */
+    overflow: hidden; /* Prevent the whole area from scrolling, force internal widgets to scroll */
+    align-horizontal: left;
 }
 
 #pagination-slot {
@@ -168,8 +175,48 @@ Button {
 }
 
 #main-content-container {
-    height: auto;
+    height: 100%;
     width: 100%;
+}
+
+#log-view-layout {
+    height: 100%;
+    width: 100%;
+}
+
+#log-content {
+    height: 1fr;
+    background: #1A1A2E;
+    padding: 0;
+    scrollbar-gutter: auto;
+}
+
+#log-actions-bar {
+    height: 1;
+    align: center middle;
+    background: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+#log-actions-bar Button {
+    height: 1;
+    min-width: 15;
+    border: none;
+    background: #3D5A80;
+    margin-right: 2;
+}
+
+#cb-auto-refresh {
+    width: auto;
+    height: 1;
+    border: none;
+    background: transparent;
+}
+
+#cb-auto-refresh .checkbox--label {
+    color: #BE95C4;
 }
 
 /* Media Card Styles */
