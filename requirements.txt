@@ -34,3 +34,6 @@ typing_extensions==4.15.0
 uc-micro-py==1.0.3
 yarl==1.22.0
 textual-plotext
+numpy
+numpy
+textual-plotext
