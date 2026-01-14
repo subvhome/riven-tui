@@ -400,6 +400,10 @@ class RivenAPI:
                 for key in ["movie_results", "tv_results"]:
                     if data.get(key):
                         return (data[key][0].get("id"), None)
+                if data.get("tv_episode_results"):
+                    return (data["tv_episode_results"][0].get("show_id"), None)
+                if data.get("tv_season_results"):
+                    return (data["tv_season_results"][0].get("show_id"), None)
                 return (None, "No TMDB mapping found for this external ID")
             else:
                 return (None, f"TMDB find failed: Status {resp.status_code}")
@@ -437,6 +441,17 @@ class RivenAPI:
 
     async def get_services(self, riven_key: str):
         url = f"{self.be_base_url}/api/v1/services"
+        headers = {"x-api-key": riven_key}
+        try:
+            resp = await self.client.get(url, headers=headers)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Status: {resp.status_code}"
+        except Exception as e:
+            return None, str(e)
+
+    async def get_health(self, riven_key: str):
+        url = f"{self.be_base_url}/api/v1/health"
         headers = {"x-api-key": riven_key}
         try:
             resp = await self.client.get(url, headers=headers)

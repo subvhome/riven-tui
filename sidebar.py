@@ -1,34 +1,145 @@
-from textual.widgets import Static, ListView, ListItem, Label, Button
-from textual.containers import Container
 from textual.app import ComposeResult
+from textual.containers import Container, Horizontal, Vertical
+from textual.widgets import Static, Label, ListView, ListItem, Button, Input, Select, Checkbox
+from textual.message import Message
+from textual import on
+from typing import List, Dict
+import calendar
 
 class Sidebar(Container):
     def compose(self) -> ComposeResult:
-        yield Static("CATEGORIES", id="sidebar-title")
-        yield ListView(id="sidebar-list")
-        yield Button("Back to Categories", id="sidebar-footer-link", variant="primary") 
+        yield Static("", id="sidebar-title")
+        
+        # 1. Main List Container (for Search Results, etc)
+        with Vertical(id="sidebar-list-container", classes="hidden"):
+            yield ListView(id="sidebar-list")
+        
+        # 2. Library Filter Container
+        with Vertical(id="sidebar-filters-container", classes="hidden"):
+            with Vertical(classes="filter-scroll-area"):
+                yield Label("Search:")
+                yield Input(placeholder="Search library...", id="lib-filter-search")
+                
+                yield Label("Type:")
+                yield Select([
+                    ("All", None), 
+                    ("Movie", "movie"), 
+                    ("TV Show", "show"),
+                    ("Anime", "anime")
+                ], prompt="Type", id="lib-filter-type", allow_blank=False, value=None)
+                
+                yield Label("States:")
+                yield Select([
+                    ("All", None),
+                    ("Unknown", "Unknown"),
+                    ("Unreleased", "Unreleased"),
+                    ("Ongoing", "Ongoing"),
+                    ("Requested", "Requested"),
+                    ("Indexed", "Indexed"),
+                    ("Scraped", "Scraped"),
+                    ("Downloaded", "Downloaded"),
+                    ("Symlinked", "Symlinked"),
+                    ("Completed", "Completed"),
+                    ("Partially Completed", "PartiallyCompleted"),
+                    ("Failed", "Failed"),
+                    ("Paused", "Paused")
+                ], prompt="States", id="lib-filter-states", allow_blank=False, value=None)
+
+                yield Label("Sort:")
+                yield Select([
+                    ("Date Desc", "date_desc"), 
+                    ("Date Asc", "date_asc"), 
+                    ("Title Asc", "title_asc"), 
+                    ("Title Desc", "title_desc")
+                ], prompt="Sort", id="lib-filter-sort", allow_blank=False, value="date_desc")
+                
+                yield Label("Limit:")
+                yield Select([("5", 5), ("10", 10), ("20", 20), ("50", 50)], prompt="Limit", id="lib-filter-limit", allow_blank=False, value=20)
+                
+                yield Label("Page:")
+                yield Input("1", placeholder="Page", id="lib-filter-page")
+
+                with Horizontal(classes="checkbox-row"):
+                    yield Checkbox("Count Only", id="lib-filter-count-only", value=False)
+
+            yield Button("Apply Filters", id="btn-apply-filters", variant="success")
+            yield Vertical(id="sidebar-lib-pagination")
+
+        # 3. Calendar Summary Container
+        with Vertical(id="sidebar-calendar-container", classes="hidden"):
+            yield Static("JUMP TO DATE", classes="sidebar-subtitle")
+            with Horizontal(classes="calendar-jumper-row"):
+                yield Button("<", id="btn-prev-year-sidebar", classes="jumper-btn")
+                yield Label("2026", id="label-year-sidebar", classes="jumper-label")
+                yield Button(">", id="btn-next-year-sidebar", classes="jumper-btn")
+            
+            with Horizontal(classes="calendar-jumper-row"):
+                yield Button("<", id="btn-prev-month-sidebar", classes="jumper-btn")
+                yield Label("January", id="label-month-sidebar", classes="jumper-label")
+                yield Button(">", id="btn-next-month-sidebar", classes="jumper-btn")
+            
+            yield Static("_" * 38, classes="sidebar-separator")
+            with Vertical(id="calendar-grid-container"):
+                pass
 
     def on_mount(self) -> None:
-        self.show_categories()
+        self.show_blank()
+
+    async def update_calendar_grid(self, year: int, month: int, active_days: set) -> None:
+        self.query_one("#label-year-sidebar", Label).update(str(year))
+        self.query_one("#label-month-sidebar", Label).update(calendar.month_name[month])
+        
+        container = self.query_one("#calendar-grid-container")
+        await container.query("*").remove()
+        
+        # Header
+        header_labels = [Label(day, classes="grid-cell grid-header-cell") for day in ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]]
+        await container.mount(Horizontal(*header_labels, classes="calendar-grid-row"))
+        
+        # Weeks
+        cal = calendar.monthcalendar(year, month)
+        for week in cal:
+            week_widgets = []
+            for day in week:
+                if day == 0:
+                    week_widgets.append(Label(" ", classes="grid-cell"))
+                else:
+                    classes = "grid-cell day-cell"
+                    if day in active_days:
+                        classes += " has-content"
+                    week_widgets.append(Button(str(day), id=f"btn-cal-day-{day}", classes=classes))
+            await container.mount(Horizontal(*week_widgets, classes="calendar-grid-row"))
+
+    def _hide_all(self) -> None:
+        self.query_one("#sidebar-title", Static).update("")
+        self.query_one("#sidebar-list-container").add_class("hidden")
+        self.query_one("#sidebar-filters-container").add_class("hidden")
+        self.query_one("#sidebar-calendar-container").add_class("hidden")
+
+    def show_blank(self) -> None:
+        self._hide_all()
 
     def show_categories(self) -> None:
-        self.query_one("#sidebar-title", Static).update("CATEGORIES")
-        self.query_one("#sidebar-footer-link").display = False
-        
-        categories = ["Movies", "TV Shows", "Downloads", "Settings"]
-        items = [ListItem(Label(cat)) for cat in categories]
-        # We don't attach item_data here so they don't trigger JSON display
-        
-        lv = self.query_one(ListView)
-        lv.clear()
-        lv.extend(items)
+        # In this version, Categories/Logs/Settings in sidebar are irrelevant as per user.
+        # We will keep this method for API compatibility but make it show blank or minimal.
+        self.show_blank()
+
+    def show_library_filters(self) -> None:
+        self._hide_all()
+        self.query_one("#sidebar-title", Static).update("LIBRARY FILTERS")
+        self.query_one("#sidebar-filters-container").remove_class("hidden")
+
+    def show_calendar_summary(self) -> None:
+        self._hide_all()
+        self.query_one("#sidebar-title", Static).update("CALENDAR")
+        self.query_one("#sidebar-calendar-container").remove_class("hidden")
 
     def update_results(self, query: str, results: list) -> None:
-        """Updates the sidebar with formatted search results."""
+        self._hide_all()
         self.query_one("#sidebar-title", Static).update(f"Results: {query}")
-        self.query_one("#sidebar-footer-link").display = True
+        self.query_one("#sidebar-list-container").remove_class("hidden")
         
-        lv = self.query_one(ListView)
+        lv = self.query_one("#sidebar-list", ListView)
         lv.clear()
         
         if not results:
@@ -36,8 +147,18 @@ class Sidebar(Container):
         else:
             for item in results:
                 m_type = item.get('media_type', 'unknown')
-                title = item.get('title', 'Unknown')
-                # Format: ({media_type}){title}
-                li = ListItem(Label(f"({m_type}){title}"))
-                li.item_data = item # Store raw JSON for the MainContent area
-                lv.extend([li])
+                title = item.get('title') or item.get('name') or 'Unknown'
+                li = ListItem(Label(f"({m_type}) {title}"))
+                li.item_data = item
+                lv.append(li)
+
+    def get_filter_values(self) -> dict:
+        return {
+            "search": self.query_one("#lib-filter-search", Input).value,
+            "type": self.query_one("#lib-filter-type", Select).value,
+            "states": self.query_one("#lib-filter-states", Select).value,
+            "sort": self.query_one("#lib-filter-sort", Select).value,
+            "limit": self.query_one("#lib-filter-limit", Select).value,
+            "page": self.query_one("#lib-filter-page", Input).value,
+            "count_only": self.query_one("#lib-filter-count-only", Checkbox).value,
+        }
