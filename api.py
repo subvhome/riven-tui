@@ -431,8 +431,10 @@ class RivenAPI:
     async def get_stats(self, riven_key: str):
         url = f"{self.be_base_url}/api/v1/stats"
         headers = {"x-api-key": riven_key}
+        self.logger.info(f"get_stats: URL={url}")
         try:
             resp = await self.client.get(url, headers=headers)
+            self.logger.info(f"get_stats: Status={resp.status_code}")
             if resp.status_code == 200:
                 return resp.json(), None
             return None, f"Status: {resp.status_code}"
@@ -453,8 +455,10 @@ class RivenAPI:
     async def get_health(self, riven_key: str):
         url = f"{self.be_base_url}/api/v1/health"
         headers = {"x-api-key": riven_key}
+        self.logger.info(f"get_health: URL={url}")
         try:
             resp = await self.client.get(url, headers=headers)
+            self.logger.info(f"get_health: Status={resp.status_code}")
             if resp.status_code == 200:
                 return resp.json(), None
             return None, f"Status: {resp.status_code}"

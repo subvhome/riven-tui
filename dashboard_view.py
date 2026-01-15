@@ -33,10 +33,13 @@ class DashboardView(Vertical):
                 self.item_data = item_data
 
         def on_click(self, event) -> None:
-            # If the button was clicked, we handle it via @on(Button.Pressed)
-            # But we want clicks on the label or container to open the card
-            if event.target == self or isinstance(event.target, Label):
-                self.post_message(self.Clicked(self.item_data, self.source))
+            # If the [+] button was clicked, we ignore it here (handled by on_button_pressed)
+            if self.show_add:
+                btn = self.query_one(Button)
+                if event.screen_x >= btn.region.x and event.screen_x < (btn.region.x + btn.region.width):
+                    return
+
+            self.post_message(self.Clicked(self.item_data, self.source))
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             if event.button.id == "btn-quick-add":
