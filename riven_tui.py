@@ -97,6 +97,175 @@ class UpdateScreen(ModalScreen[bool]):
             await asyncio.sleep(5)
             self.dismiss(False)
 
+class MediaCardScreen(ModalScreen):
+    def __init__(self, tmdb_data: dict, riven_data: dict, media_type: str, api: RivenAPI, settings: dict, chafa_available: bool):
+        super().__init__(classes="centered-modal-screen")
+        self.tmdb_data = tmdb_data
+        self.riven_data = riven_data
+        self.media_type = media_type
+        self.api = api
+        self.settings = settings
+        self.chafa_available = chafa_available
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="modal-media-card"):
+            with Vertical(id="modal-scroll-area", classes="scrollable-container"):
+                yield Vertical(id="modal-media-container")
+
+    async def on_mount(self):
+        container = self.query_one("#modal-media-container")
+        tmdb_data = self.tmdb_data
+        riven_data = self.riven_data
+        
+        title = tmdb_data.get('title') or tmdb_data.get('name', 'N/A')
+        year = (tmdb_data.get('release_date') or tmdb_data.get('first_air_date', 'N/A'))[:4]
+        tagline = tmdb_data.get('tagline')
+        
+        # Match show_item_actions logic for runtime
+        runtime_movie = tmdb_data.get('runtime', 0)
+        episode_run_time = None
+        if self.media_type == "tv":
+            episode_run_time_list = tmdb_data.get('episode_run_time', [])
+            if episode_run_time_list:
+                episode_run_time = f"{episode_run_time_list[0]} mins"
+
+        genres = " - ".join([genre.get('name') for genre in tmdb_data.get('genres', []) if genre.get('name')])
+        description = tmdb_data.get('overview')
+        status = tmdb_data.get('status')
+        
+        languages_spoken_list = [lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
+        if not languages_spoken_list and tmdb_data.get('original_language'):
+            languages_spoken_list.append(tmdb_data.get('original_language').upper())
+        languages_spoken = " - ".join(languages_spoken_list)
+
+        # 0. Status Label (Top)
+        status_text = f"In Library (Riven ID: {riven_data.get('id')})" if riven_data else "Not in Library"
+        await container.mount(Static(status_text, id="modal-status-label"))
+
+        # 1. Header & Tagline
+        await container.mount(Static(f"[bold]{title}[/bold]", classes="media-title"))
+        if tagline:
+            await container.mount(Static(f"[italic]{tagline}[/italic]", classes="media-tagline"))
+
+        # 2. Action Buttons Row
+        action_buttons = []
+        if riven_data:
+            action_buttons.extend([
+                Button("Delete", id="btn-delete-modal", variant="error"),
+                Button("Reset", id="btn-reset-modal", variant="warning"),
+                Button("Retry", id="btn-retry-modal", variant="primary"),
+            ])
+        action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success"))
+        if not riven_data:
+            action_buttons.append(Button("Add to Library", id="btn-add-modal", variant="success"))
+        
+        action_buttons.append(Button("Back", id="btn-back-to-dashboard", variant="primary"))
+        action_buttons.append(Button("Print TMDB JSON", id="btn-print-json-modal"))
+        
+        await container.mount(Horizontal(*action_buttons, classes="media-button-bar", id="modal-button-row"))
+
+        # 3. Metadata Line
+        meta_items = [year]
+        if self.media_type == "movie" and runtime_movie:
+            meta_items.append(f"{runtime_movie} mins")
+        elif self.media_type == "tv" and episode_run_time:
+            meta_items.append(episode_run_time)
+            
+        if languages_spoken:
+            meta_items.append(languages_spoken)
+        if status:
+            meta_items.append(status)
+            
+        await container.mount(Static(" * ".join(filter(None, meta_items)), classes="media-metadata"))
+
+        # 4. Genres & Description
+        if genres:
+            await container.mount(Static(f"Genres: {genres}", classes="media-genres"))
+        if description:
+            await container.mount(Static(description, classes="media-overview"))
+            
+        # Render poster
+        if self.chafa_available and tmdb_data.get("poster_path"):
+            poster_url = f"https://image.tmdb.org/t/p/w1280{tmdb_data['poster_path']}"
+            poster_art, error = await self.api.get_poster_chafa(poster_url, width=50)
+            if not error:
+                await container.mount(Static(Text.from_ansi(poster_art), id="poster-display"))
+
+    @on(Button.Pressed, "#btn-print-json-modal")
+    def handle_print_json(self):
+        self.dismiss()
+        self.app.navigation_source = "dashboard"
+        self.app.query_one("#dashboard-wrapper").display = False
+        self.app.query_one("#main-area").display = True
+        main_content = self.app.query_one(MainContent)
+        main_content.display = True
+        main_content.tmdb_details = self.tmdb_data
+        self.app.run_worker(main_content.display_json(self.tmdb_data))
+
+    @on(Button.Pressed, "#btn-back-to-dashboard")
+    def exit_modal(self):
+        self.dismiss()
+
+    @on(Button.Pressed, "#btn-add-modal")
+    async def handle_add(self):
+        title = self.tmdb_data.get("name") or self.tmdb_data.get("title")
+        id_to_add = self.tmdb_data.get("external_ids", {}).get("tvdb_id") if self.media_type == "tv" else self.tmdb_data.get("id")
+        id_type = "tvdb_ids" if self.media_type == "tv" else "tmdb_ids"
+        riven_type = "show" if self.media_type == "tv" else "movie"
+        
+        if not id_to_add:
+            self.app.notify(f"Missing {id_type[:-1].upper()} for add.", severity="error")
+            return
+
+        self.app.notify(f"Adding '{title}' to library...")
+        success, response = await self.api.add_item(riven_type, id_type, str(id_to_add), self.settings.get("riven_key"))
+        if success:
+            self.app.notify(f"'{title}' added successfully!", severity="success")
+            self.dismiss()
+            self.app.run_worker(self.app.refresh_dashboard())
+        else:
+            self.app.notify(f"Failed to add: {response}", severity="error")
+
+    @on(Button.Pressed, "#btn-delete-modal")
+    async def handle_delete(self):
+        item_id = self.riven_data.get("id")
+        success, _ = await self.api.delete_item(item_id, self.settings.get("riven_key"))
+        if success:
+            self.app.notify("Item deleted", severity="success")
+            self.dismiss()
+            self.app.run_worker(self.app.refresh_dashboard())
+        else:
+            self.app.notify("Failed to delete item.", severity="error")
+
+    @on(Button.Pressed, "#btn-reset-modal")
+    async def handle_reset(self):
+        item_id = self.riven_data.get("id")
+        success, _ = await self.api.reset_item(item_id, self.settings.get("riven_key"))
+        if success:
+            self.app.notify("Item reset successfully.", severity="information")
+            self.dismiss()
+        else:
+            self.app.notify("Failed to reset item.", severity="error")
+
+    @on(Button.Pressed, "#btn-retry-modal")
+    async def handle_retry(self):
+        item_id = self.riven_data.get("id")
+        success, _ = await self.api.retry_item(item_id, self.settings.get("riven_key"))
+        if success:
+            self.app.notify("Item sent for retry.", severity="information")
+            self.dismiss()
+        else:
+            self.app.notify("Failed to retry item.", severity="error")
+
+    @on(Button.Pressed, "#btn-scrape-modal")
+    def handle_scrape(self):
+        self.dismiss()
+        main_content = self.app.query_one(MainContent)
+        main_content.item_data = {"id": self.tmdb_data.get("id"), "media_type": self.media_type}
+        main_content.tmdb_details = self.tmdb_data
+        main_content.item_details = self.riven_data
+        self.app.run_worker(self.app._run_manual_scrape)
+
 class ScrapeLogScreen(ModalScreen):
     def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
@@ -517,11 +686,159 @@ class MainContent(Vertical):
         await json_scroll_container.mount(Static(formatted_json, id="main-content-body"))
         await container.mount(Button("Back", id="btn-back-to-actions"))
 
+class LogsView(Vertical):
+    filter_query = reactive("")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.displayed_logs = []
+        self._refresh_timer = None
+
+    def compose(self) -> ComposeResult:
+        yield RichLog(id="logs-display", wrap=True, highlight=True, markup=True)
+        with Horizontal(id="logs-controls"):
+            yield Input(placeholder="Filter logs (use ! to exclude)...", id="logs-filter-input")
+            yield Button("Refresh", id="btn-logs-refresh", variant="primary")
+            yield Checkbox("Auto Refresh", id="cb-logs-auto-refresh", value=False)
+            yield Button("Clear", id="btn-logs-clear", variant="error")
+
+    def _matches_filter(self, line: str) -> bool:
+        if not self.filter_query:
+            return True
+        
+        query = self.filter_query
+        # Smart Case: case-sensitive if query has uppercase
+        is_case_sensitive = any(c.isupper() for c in query)
+        
+        terms = query.split()
+        for term in terms:
+            negate = term.startswith("!")
+            search_term = term[1:] if negate else term
+            
+            if not search_term:
+                continue
+
+            if is_case_sensitive:
+                found = search_term in line
+            else:
+                found = search_term.lower() in line.lower()
+            
+            if negate and found:
+                return False
+            if not negate and not found:
+                return False
+        
+        return True
+
+    def _style_line(self, line: str) -> str:
+        styled_line = escape(line)
+        if "|" in line:
+            parts = line.split("|", 2)
+            if len(parts) >= 2:
+                level_part = parts[1].strip()
+                color = "white"
+                if "ERROR" in level_part: color = "red"
+                elif "WARNING" in level_part: color = "yellow"
+                elif "SUCCESS" in level_part: color = "green"
+                elif "DEBUG" in level_part: color = "cyan"
+                elif "PROGRAM" in level_part: color = "magenta"
+                
+                p0 = escape(parts[0])
+                p1 = escape(parts[1])
+                
+                if len(parts) == 3:
+                    p2 = escape(parts[2])
+                    styled_line = f"{p0} | [bold {color}]{p1}[/] |{p2}"
+                else:
+                    styled_line = f"{p0} | [bold {color}]{p1}[/]"
+        return styled_line
+
+    def watch_filter_query(self, new_query: str) -> None:
+        log_widget = self.query_one("#logs-display", RichLog)
+        log_widget.clear()
+        for line in self.displayed_logs:
+            if "GET /api/v1/logs" in line:
+                continue
+            if self._matches_filter(line):
+                log_widget.write(self._style_line(line))
+
+    @on(Input.Changed, "#logs-filter-input")
+    def on_filter_changed(self, event: Input.Changed) -> None:
+        self.filter_query = event.value.strip()
+
+    async def update_logs(self, refresh_all: bool = False):
+        riven_key = self.app.settings.get("riven_key")
+        logs, error = await self.app.api.get_direct_logs(riven_key)
+        
+        if error:
+            self.app.notify(f"Error fetching logs: {error}", severity="error")
+            return
+
+        log_widget = self.query_one("#logs-display", RichLog)
+        
+        if refresh_all:
+            log_widget.clear()
+            self.displayed_logs = []
+            # Apply display limit on initial load
+            limit = self.app.settings.get("log_display_limit", 50)
+            if len(logs) > limit:
+                logs = logs[-limit:]
+
+        # Find new logs
+        new_lines = []
+        if not self.displayed_logs:
+            new_lines = logs
+        else:
+            last_line = self.displayed_logs[-1]
+            try:
+                idx = -1
+                for i in range(len(logs) - 1, -1, -1):
+                    if logs[i] == last_line:
+                        idx = i
+                        break
+                
+                if idx != -1:
+                    new_lines = logs[idx+1:]
+                else:
+                    new_lines = logs
+            except Exception:
+                new_lines = logs
+
+        for line in new_lines:
+            if "GET /api/v1/logs" in line:
+                continue
+            
+            self.displayed_logs.append(line)
+            if self._matches_filter(line):
+                log_widget.write(self._style_line(line))
+
+    @on(Button.Pressed, "#btn-logs-refresh")
+    async def handle_refresh(self):
+        await self.update_logs()
+
+    @on(Button.Pressed, "#btn-logs-clear")
+    def handle_clear(self):
+        self.query_one("#logs-display", RichLog).clear()
+        self.displayed_logs = []
+
+    @on(Checkbox.Changed, "#cb-logs-auto-refresh")
+    def handle_auto_refresh(self, event: Checkbox.Changed):
+        refresh_btn = self.query_one("#btn-logs-refresh", Button)
+        if event.value:
+            refresh_btn.disabled = True
+            interval = self.app.settings.get("log_refresh_interval", 5.0)
+            self._refresh_timer = self.set_interval(interval, self.update_logs)
+        else:
+            refresh_btn.disabled = False
+            if self._refresh_timer:
+                self._refresh_timer.stop()
+                self._refresh_timer = None
+
 class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
 
     base_title = reactive("Riven TUI") 
-    app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced"] = reactive("dashboard")
+    app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced", "logs"] = reactive("dashboard")
     current_calendar_date = reactive(datetime.now())
     calendar_filters = reactive({"movie": True, "episode": True, "show": True, "season": True})
 
@@ -585,6 +902,7 @@ class RivenTUI(App):
             yield Button("Advanced", id="btn-header-advanced")
             yield Button("Calendar", id="btn-header-calendar")
             yield Button("Settings", id="btn-header-settings")
+            yield Button("Logs", id="btn-header-logs")
             yield Static(self.base_title, id="header-title")
 
         yield SearchArea(id="search-subheader")
@@ -600,6 +918,7 @@ class RivenTUI(App):
             
             yield SettingsView(id="settings-view")
             yield AdvancedView(id="advanced-view")
+            yield LogsView(id="logs-view")
 
         if self.settings.get("tui_debug"):
             yield Log(id="debug-log", highlight=True)
@@ -621,7 +940,7 @@ class RivenTUI(App):
                         remote_version = match.group(1)
                         
                         def version_tuple(v):
-                            return tuple(map(int, (v.split("."))))
+                            return tuple(map(int, (v.replace(",", ".").split("."))))
                         
                         try:
                             if version_tuple(remote_version) > version_tuple(VERSION):
@@ -684,6 +1003,8 @@ class RivenTUI(App):
         if not riven_key:
             return
 
+        self.log_message("Dashboard: Starting refresh...")
+
         # Fetch stats, health, recently added, and trending in parallel
         stats_task = self.api.get_stats(riven_key)
         health_task = self.api.get_health(riven_key)
@@ -698,7 +1019,13 @@ class RivenTUI(App):
         services_task = self.api.get_services(riven_key)
         settings_task = self.api.get_settings(riven_key)
         
-        results = await asyncio.gather(stats_task, health_task, recent_task, trending_task, services_task, settings_task, return_exceptions=True)
+        self.log_message("Dashboard: Awaiting parallel API tasks...")
+        try:
+            results = await asyncio.gather(stats_task, health_task, recent_task, trending_task, services_task, settings_task, return_exceptions=True)
+            self.log_message(f"Dashboard: API tasks completed. Results count: {len(results)}")
+        except Exception as e:
+            self.log_message(f"Dashboard: Error in asyncio.gather: {e}")
+            return
         
         stats_resp = results[0] if not isinstance(results[0], Exception) else (None, str(results[0]))
         health_resp = results[1] if not isinstance(results[1], Exception) else (None, str(results[1]))
@@ -714,6 +1041,7 @@ class RivenTUI(App):
         if health_resp and health_resp[0]:
             health_ok = health_resp[0].get("message") == "True"
         
+        self.log_message("Dashboard: Updating UI components...")
         await dashboard_view.update_stats(stats_data, health_ok)
         
         # Update recently added
@@ -734,6 +1062,8 @@ class RivenTUI(App):
         # Update distribution grid
         if stats_data.get("states"):
             await dashboard_view.update_states_overview(stats_data["states"])
+        
+        self.log_message("Dashboard: Refresh complete.")
 
     def watch_app_state(self, new_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced"]) -> None:
         welcome_message = self.query_one("#welcome-message")
@@ -746,6 +1076,7 @@ class RivenTUI(App):
         dashboard_view = self.query_one(DashboardView)
         dashboard_wrapper = self.query_one("#dashboard-wrapper")
         advanced_view = self.query_one(AdvancedView)
+        logs_view = self.query_one("#logs-view")
 
         welcome_message.display = False
         search_subheader.display = False
@@ -756,6 +1087,7 @@ class RivenTUI(App):
         dashboard_view.display = False
         dashboard_wrapper.display = False
         advanced_view.display = False
+        logs_view.display = False
 
         # Update Tab Classes
         for btn in self.query("#header-bar Button"):
@@ -772,9 +1104,6 @@ class RivenTUI(App):
         elif new_state == "dashboard":
             dashboard_view.display = True
             dashboard_wrapper.display = True
-            sidebar.display = True
-            sidebar.show_blank()
-            main_area.display = True
             self.run_worker(self.refresh_dashboard())
         elif new_state == "advanced":
             advanced_view.display = True
@@ -808,31 +1137,48 @@ class RivenTUI(App):
             main_area.display = True
             if not settings_view.settings_data:
                 settings_view.post_message(Button.Pressed(settings_view.query_one("#btn-refresh-settings")))
+        elif new_state == "logs":
+            logs_view.display = True
+            # Full width, no sidebar
+            main_area.display = False
+            sidebar.display = False
     @on(Button.Pressed, "#btn-header-dashboard")
-    def on_dashboard_button_pressed(self) -> None: 
+    async def on_dashboard_button_pressed(self) -> None: 
         self.app_state = "dashboard"
+        self.watch_app_state("dashboard")
 
     @on(Button.Pressed, "#btn-header-search")
-    def on_search_button_pressed(self) -> None: 
+    async def on_search_button_pressed(self) -> None: 
         self.app_state = "search"
+        self.watch_app_state("search")
 
     @on(Button.Pressed, "#btn-header-library")
     async def on_library_button_pressed(self) -> None: 
         self.app_state = "library" 
+        self.watch_app_state("library")
         await self.show_library_items(refresh_cache=True)
 
     @on(Button.Pressed, "#btn-header-advanced")
-    def on_advanced_button_pressed(self) -> None:
+    async def on_advanced_button_pressed(self) -> None:
         self.app_state = "advanced"
+        self.watch_app_state("advanced")
 
     @on(Button.Pressed, "#btn-header-calendar")
     async def on_calendar_button_pressed(self) -> None:
         self.app_state = "calendar"
+        self.watch_app_state("calendar")
         await self.show_calendar(refresh_cache=True)
 
     @on(Button.Pressed, "#btn-header-settings")
-    def on_settings_button_pressed(self) -> None:
+    async def on_settings_button_pressed(self) -> None:
         self.app_state = "settings"
+        self.watch_app_state("settings")
+
+    @on(Button.Pressed, "#btn-header-logs")
+    async def on_logs_button_pressed(self) -> None:
+        self.app_state = "logs"
+        self.watch_app_state("logs")
+        await self.query_one("#logs-view").update_logs(refresh_all=True)
 
     def watch_base_title(self, new_title: str) -> None: 
         if self.spinner is not None:
@@ -1020,7 +1366,6 @@ class RivenTUI(App):
     @on(DashboardView.DashboardItem.Clicked)
     async def on_dashboard_item_clicked(self, message: DashboardView.DashboardItem.Clicked) -> None:
         self.navigation_source = "dashboard"
-        main_content = self.query_one(MainContent)
         item = message.item_data
         source = message.source
         
@@ -1045,8 +1390,9 @@ class RivenTUI(App):
                     source_type = "imdb_id"
                 
                 if external_id:
-                    self.notify(f"Resolving details for '{item.get('title')}'...", severity="information")
+                    await self.start_spinner(f"Resolving details for '{item.get('title')}'...")
                     resolved_id, err = await self.api.find_tmdb_id(str(external_id), source_type, self.settings.get("tmdb_bearer_token"))
+                    self.stop_spinner()
                     if resolved_id:
                         tmdb_id = resolved_id
         else: # trending
@@ -1057,15 +1403,30 @@ class RivenTUI(App):
             self.notify("Cannot open item: missing TMDB ID", severity="error")
             return
 
-        # Switch visibility
-        self.query_one("#dashboard-wrapper").display = False
-        main_content.display = True
+        # Fetch details and show modal
+        await self.start_spinner("Fetching details...")
+        tmdb_details, error = await self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token"))
+        if error:
+            self.stop_spinner()
+            self.notify(f"TMDB Error: {error}", severity="error")
+            return
+            
+        riven_media_type = "tv" if media_type == "tv" else "movie"
+        riven_id_to_check = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
+        
+        riven_details = None
+        if riven_id_to_check:
+            riven_details = await self.api.get_item_by_id(riven_media_type, str(riven_id_to_check), self.settings.get("riven_key"))
+            
+        self.stop_spinner()
+        
+        # Set state for manual scrape integration
+        main_content = self.query_one(MainContent)
+        main_content.tmdb_details = tmdb_details
+        main_content.item_details = riven_details
+        main_content.item_data = {"id": tmdb_id, "media_type": media_type}
 
-        main_content.item_data = {
-            "id": tmdb_id,
-            "media_type": media_type
-        }
-        await self._refresh_current_item_data_and_ui(delay=0)
+        self.push_screen(MediaCardScreen(tmdb_details, riven_details, media_type, self.api, self.settings, self.chafa_available))
 
     @on(DashboardView.DashboardItem.QuickAdd)
     async def on_dashboard_quick_add(self, message: DashboardView.DashboardItem.QuickAdd) -> None:
