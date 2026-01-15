@@ -2,19 +2,19 @@
 
 A terminal-based management interface for [Riven](https://github.com/rivenmedia/riven). 
 
-Built for those who prefer staying in the shell, this TUI provides a visual way to monitor your library, discover new content, and handle manual scrapes without opening a browser.
+Built for those who prefer staying in the shell, this TUI provides a visual way to monitor your library, search for content, and handle manual scrapes without opening a browser.
 
 ![Dashboard](assets/welcome-dashboard.jpg)
 
 ## What's inside
 
-- **Central Dashboard**: A single view for library statistics (movies/shows), system health, and a feed of recently added media.
-- **Library Analytics**: Custom Unicode-based bar charts for tracking your library state distribution.
-- **Discovery**: Integrated [TMDB](https://www.themoviedb.org/) trending lists with a "Quick Add" feature to send content to Riven instantly.
+- **Central Dashboard**: A single view for library statistics, service health status, recently added media, and trending content.
+- **Library Management**: Browse your collection with powerful filters (Type, State, Sort). View detailed metadata and manage items (Delete, Reset, Retry).
+- **Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping directly from the TUI.
+- **Live Logs**: A dedicated, full-screen log viewer with real-time updates, keyword filtering, and negation support.
+- **Settings Editor**: A complete, tree-based configuration editor for your Riven backend settings.
 - **Advanced Management**: Mass-action suite for library maintenance. Scan external lists (like [Mdblist](https://mdblist.com/)) and bulk Delete, Reset, or Retry items in your library.
-- **Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping.
 - **Posters & Visuals**: High-resolution poster rendering using [chafa](https://hpjansson.org/chafa/).
-- **Live Logs**: Integrated log viewer for the Riven backend.
 
 ## Installation
 
@@ -70,6 +70,8 @@ Settings are managed in `settings.json`. The installer will prompt you for these
 - `tmdb_bearer_token`: [TMDB Read Access Token](https://www.themoviedb.org/settings/api) for search and discovery.
 - `be_config`: Connection details for your Riven backend.
 - `chafa_max_width`: Maximum width for poster rendering (default: 100).
+- `log_display_limit`: Number of lines to fetch on initial log load.
+- `log_refresh_interval`: Seconds between auto-refreshes in the log view.
 
 ## Controls
 
