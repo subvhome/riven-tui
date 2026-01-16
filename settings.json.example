@@ -11,7 +11,6 @@
     },
     "riven_key": "YOUR_RIVEN_API_KEY",
     "request_timeout": 30.0,
-    "tui_debug": true,
     "tmdb_bearer_token": "YOUR_TMDB_BEARER_TOKEN",
     "log_display_limit": 20,
     "log_tailing_enabled": true,

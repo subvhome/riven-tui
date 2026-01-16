@@ -184,8 +184,6 @@ cat > settings.json <<EOF
 
     "request_timeout": $REQ_TIMEOUT,
 
-    "tui_debug": false,
-
     "log_display_limit": $LOG_LIMIT,
 
     "log_tailing_enabled": true,
