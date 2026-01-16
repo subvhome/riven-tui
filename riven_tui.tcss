@@ -177,10 +177,10 @@ Button {
     align: center top;
 }
 
-#main-content-container, #main-content-json-container { 
+#main-content-container, #main-content-json-container, #modal-json-container { 
     height: auto; 
     width: 80; /* Prevents stretching */
-    margin: 2 0; /* Removed 'auto' which is unsupported in Textual CSS */
+    margin: 2 0; 
 }
 
 #modal-json-container Static, #main-content-json-container Static {
@@ -530,7 +530,8 @@ ListItem {
 
 .scrollable-container {
     height: 1fr;
-    overflow-y: scroll;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
 }
 
 /* Calendar Styles */
