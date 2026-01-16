@@ -836,6 +836,9 @@ class LogsView(Vertical):
 
 class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
+    BINDINGS = [
+        ("ctrl+t", "toggle_debug", "Debug"),
+    ]
 
     base_title = reactive("Riven TUI") 
     app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced", "logs"] = reactive("dashboard")
@@ -863,12 +866,11 @@ class RivenTUI(App):
         self.current_trending_page = 1
 
     def log_message(self, message: str):
-        if self.settings.get("tui_debug"):
-            try:
-                log_widget = self.query_one("#debug-log", Log)
-                log_widget.write_line(message)
-            except NoMatches:
-                pass
+        try:
+            log_widget = self.query_one("#debug-log", Log)
+            log_widget.write_line(message)
+        except NoMatches:
+            pass
         self.file_logger.info(message)
 
     def on_load(self) -> None: 
@@ -893,6 +895,13 @@ class RivenTUI(App):
             return f"{protocol}://{host}:{port}"
         return f"{protocol}://{host}"
         
+    def action_toggle_debug(self) -> None:
+        try:
+            log_widget = self.query_one("#debug-log", Log)
+            log_widget.toggle_class("hidden")
+        except NoMatches:
+            pass
+
     def compose(self) -> ComposeResult:
         with Horizontal(id="header-bar"):
             yield Button("Dashboard", id="btn-header-dashboard")
@@ -920,8 +929,7 @@ class RivenTUI(App):
             yield AdvancedView(id="advanced-view")
             yield LogsView(id="logs-view")
 
-        if self.settings.get("tui_debug"):
-            yield Log(id="debug-log", highlight=True)
+        yield Log(id="debug-log", highlight=True, classes="hidden")
 
         yield Footer()
 
