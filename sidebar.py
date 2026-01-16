@@ -119,11 +119,6 @@ class Sidebar(Container):
     def show_blank(self) -> None:
         self._hide_all()
 
-    def show_categories(self) -> None:
-        # In this version, Categories/Logs/Settings in sidebar are irrelevant as per user.
-        # We will keep this method for API compatibility but make it show blank or minimal.
-        self.show_blank()
-
     def show_library_filters(self) -> None:
         self._hide_all()
         self.query_one("#sidebar-title", Static).update("LIBRARY FILTERS")

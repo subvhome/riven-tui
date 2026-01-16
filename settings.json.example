@@ -1,9 +1,4 @@
 {
-    "fe_config": {
-        "protocol": "http",
-        "host": "localhost",
-        "port": 3000
-    },
     "be_config": {
         "protocol": "http",
         "host": "localhost",
