@@ -165,16 +165,36 @@ Button {
     background: #1A1A2E; 
     padding: 0; 
     height: 1fr; 
-    overflow-y: auto; 
-    scrollbar-gutter: stable; 
-    align: center top; /* Centers the child container */
+    overflow: hidden; /* Changed from overflow-y: auto to allow fixed footer */
+    align: center top;
 }
 
-#main-content-container { 
+#main-content-scroll-area {
+    height: 1fr;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    width: 100%;
+    align: center top;
+}
+
+#main-content-container, #main-content-json-container { 
     height: auto; 
     width: 80; /* Prevents stretching */
-    margin: 2 0;
+    margin: 2 0; /* Removed 'auto' which is unsupported in Textual CSS */
 }
+
+#modal-json-container Static, #main-content-json-container Static {
+    width: 100%;
+    height: auto;
+    color: #BE95C4;
+}
+
+#btn-back-from-json, #btn-back-to-actions {
+    width: 100%;
+    margin: 1 0;
+    dock: bottom;
+}
+
 
 #sidebar-lib-pagination {
     margin-top: 1;
@@ -1061,6 +1081,7 @@ ListItem {
 #logs-controls Checkbox .checkbox--label {
     color: #BE95C4;
 }
+
 
 #dashboard-wrapper { width: 100%; height: 100%; align: center top; }
 #dashboard-view {

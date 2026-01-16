@@ -111,6 +111,8 @@ class MediaCardScreen(ModalScreen):
         with Vertical(id="modal-media-card"):
             with Vertical(id="modal-scroll-area", classes="scrollable-container"):
                 yield Vertical(id="modal-media-container")
+                yield Vertical(id="modal-json-container", classes="hidden")
+            yield Button("Back to Media", id="btn-back-from-json", variant="primary", classes="hidden")
 
     async def on_mount(self):
         container = self.query_one("#modal-media-container")
@@ -160,7 +162,7 @@ class MediaCardScreen(ModalScreen):
             action_buttons.append(Button("Add to Library", id="btn-add-modal", variant="success"))
         
         action_buttons.append(Button("Back", id="btn-back-to-dashboard", variant="primary"))
-        action_buttons.append(Button("Print TMDB JSON", id="btn-print-json-modal"))
+        action_buttons.append(Button("JSON", id="btn-print-json-modal"))
         
         await container.mount(Horizontal(*action_buttons, classes="media-button-bar", id="modal-button-row"))
 
@@ -192,15 +194,36 @@ class MediaCardScreen(ModalScreen):
                 await container.mount(Static(Text.from_ansi(poster_art), id="poster-display"))
 
     @on(Button.Pressed, "#btn-print-json-modal")
-    def handle_print_json(self):
-        self.dismiss()
-        self.app.navigation_source = "dashboard"
-        self.app.query_one("#dashboard-wrapper").display = False
-        self.app.query_one("#main-area").display = True
-        main_content = self.app.query_one(MainContent)
-        main_content.display = True
-        main_content.tmdb_details = self.tmdb_data
-        self.app.run_worker(main_content.display_json(self.tmdb_data))
+    async def handle_print_json(self):
+        item = self.riven_data
+        item_id = item.get("id") if item else None
+        
+        if item_id:
+            await self.app.start_spinner("Fetching extended Riven data...")
+            media_type = item.get("type", "movie")
+            extended_data = await self.api.get_item_by_id(media_type, str(item_id), self.settings.get("riven_key"), extended=True)
+            self.app.stop_spinner()
+            data = extended_data or item
+        else:
+            data = {"info": "Item not in Riven library"}
+
+        media_container = self.query_one("#modal-media-container")
+        json_container = self.query_one("#modal-json-container")
+        back_btn = self.query_one("#btn-back-from-json")
+
+        await json_container.query("*").remove()
+        formatted_json = json.dumps(data, indent=4)
+        await json_container.mount(Static(formatted_json))
+
+        media_container.add_class("hidden")
+        json_container.remove_class("hidden")
+        back_btn.remove_class("hidden")
+
+    @on(Button.Pressed, "#btn-back-from-json")
+    def handle_back_from_json(self):
+        self.query_one("#modal-media-container").remove_class("hidden")
+        self.query_one("#modal-json-container").add_class("hidden")
+        self.query_one("#btn-back-from-json").add_class("hidden")
 
     @on(Button.Pressed, "#btn-back-to-dashboard")
     def exit_modal(self):
@@ -266,9 +289,15 @@ class MediaCardScreen(ModalScreen):
         main_content.item_details = self.riven_data
         self.app.run_worker(self.app._run_manual_scrape)
 
-class ScrapeLogScreen(ModalScreen):
-    def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
+class ScrapeLogScreen(ModalScreen[dict]):
+    def __init__(self, media_type: str, tmdb_id: int, riven_key: str, riven_item_id: str = None, tvdb_id: int = None, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
+        self.media_type = media_type
+        self.tmdb_id = tmdb_id
+        self.riven_key = riven_key
+        self.riven_item_id = riven_item_id
+        self.tvdb_id = tvdb_id
+        self.all_streams = {}
 
     def compose(self) -> ComposeResult:
         with Vertical(id="scrape-log-container", classes="modal-popup"):
@@ -276,12 +305,40 @@ class ScrapeLogScreen(ModalScreen):
             yield Log(id="scrape-log", highlight=True)
             yield Button("Close", id="btn-close-scrape-log", variant="error")
 
-    def on_mount(self) -> None:
-        self.query_one(Log).write_line("Starting stream discovery...")
+    async def on_mount(self) -> None:
+        self.run_worker(self.run_discovery())
+
+    async def run_discovery(self):
+        log_widget = self.query_one(Log)
+        log_widget.write_line("Starting stream discovery...")
+        try:
+            async for line in self.app.api.scrape_stream(
+                self.media_type, self.tmdb_id, self.riven_key, self.riven_item_id, tvdb_id=self.tvdb_id
+            ):
+                if line.startswith("data:"):
+                    data_content = line[len("data:"):].strip()
+                    if data_content == "[DONE]":
+                        break
+                    try:
+                        message_data = json.loads(data_content)
+                        if 'message' in message_data:
+                            log_widget.write_line(f"-> {message_data['message']}")
+                        if 'streams' in message_data and message_data['streams']:
+                            self.all_streams.update(message_data['streams'])
+                    except json.JSONDecodeError:
+                        continue
+                elif line.startswith("error:"):
+                    log_widget.write_line(f"ERROR: {line}")
+            
+            log_widget.write_line("Discovery complete.")
+            await asyncio.sleep(1)
+            self.dismiss(self.all_streams)
+        except Exception as e:
+            log_widget.write_line(f"Unexpected error: {e}")
 
     @on(Button.Pressed, "#btn-close-scrape-log")
     def on_close_button(self, event: Button.Pressed):
-        self.app.pop_screen()
+        self.dismiss(self.all_streams)
 
 class StreamSelectionScreen(ModalScreen[str]):
     def __init__(self, streams: List[dict], name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
@@ -666,7 +723,10 @@ class MainContent(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Static(id="main-content-title")
-        yield Vertical(id="main-content-container")
+        with Vertical(id="main-content-scroll-area"):
+            yield Vertical(id="main-content-container")
+            yield Vertical(id="main-content-json-container", classes="hidden")
+        yield Button("Back", id="btn-back-to-actions", variant="primary", classes="hidden")
 
     async def display_logs(self, logs: str):
         container = self.query_one("#main-content-container")
@@ -676,15 +736,22 @@ class MainContent(Vertical):
 
     async def display_json(self, data: dict):
         container = self.query_one("#main-content-container")
-        await container.query("*").remove()
-        
+        json_container = self.query_one("#main-content-json-container")
+        back_btn = self.query_one("#btn-back-to-actions")
+
+        await json_container.query("*").remove()
         formatted_json = json.dumps(data, indent=4)
-        
-        json_scroll_container = Vertical(id="json-scroll-container")
-        await container.mount(json_scroll_container)
-        
-        await json_scroll_container.mount(Static(formatted_json, id="main-content-body"))
-        await container.mount(Button("Back", id="btn-back-to-actions"))
+        await json_container.mount(Static(formatted_json))
+
+        container.add_class("hidden")
+        json_container.remove_class("hidden")
+        back_btn.remove_class("hidden")
+
+    @on(Button.Pressed, "#btn-back-to-actions")
+    async def handle_back_to_actions(self):
+        self.query_one("#main-content-container").remove_class("hidden")
+        self.query_one("#main-content-json-container").add_class("hidden")
+        self.query_one("#btn-back-to-actions").add_class("hidden")
 
 class LogsView(Vertical):
     filter_query = reactive("")
@@ -1246,6 +1313,12 @@ class RivenTUI(App):
 
         main_content = self.query_one(MainContent)
         container = main_content.query_one("#main-content-container")
+        
+        # Reset visibility
+        container.remove_class("hidden")
+        main_content.query_one("#main-content-json-container").add_class("hidden")
+        main_content.query_one("#btn-back-to-actions").add_class("hidden")
+
         await container.query("*").remove() 
         main_content.query_one("#main-content-title").display = False
 
@@ -1276,6 +1349,12 @@ class RivenTUI(App):
         main_content = self.query_one(MainContent)
         title_widget = main_content.query_one("#main-content-title")
         container = main_content.query_one("#main-content-container")
+
+        # Reset visibility
+        container.remove_class("hidden")
+        main_content.query_one("#main-content-json-container").add_class("hidden")
+        main_content.query_one("#btn-back-to-actions").add_class("hidden")
+
         await container.query("*").remove()
         main_content.last_chafa_width = None 
         tmdb_data = main_content.tmdb_details
@@ -1319,7 +1398,7 @@ class RivenTUI(App):
         if not riven_data:
             action_buttons.append(Button("Add to Library", id="btn-add", variant="success"))
         action_buttons.append(Button("Back", id="btn-back-to-library", variant="primary"))
-        action_buttons.append(Button("Print TMDB JSON", id="btn-print-json"))
+        action_buttons.append(Button("JSON", id="btn-print-json"))
         if action_buttons:
             await container.mount(Horizontal(*action_buttons, classes="media-button-bar"))
         metadata_items = [year]
@@ -1865,12 +1944,21 @@ class RivenTUI(App):
     @on(Button.Pressed, "#btn-print-json")
     async def handle_print_json(self):
         main_content = self.query_one(MainContent)
-        if main_content.tmdb_details:
-            await main_content.display_json(main_content.tmdb_details)
-
-    @on(Button.Pressed, "#btn-back-to-actions")
-    async def handle_back_to_actions(self):
-        await self.show_item_actions()
+        item = main_content.item_details
+        
+        if item and item.get("id"):
+            item_id = item.get("id")
+            media_type = item.get("type", "movie")
+            
+            await self.start_spinner("Fetching extended Riven data...")
+            extended_data = await self.api.get_item_by_id(media_type, str(item_id), self.settings.get("riven_key"), extended=True)
+            self.stop_spinner()
+            
+            data = extended_data or item
+        else:
+            data = {"info": "Item not in Riven library"}
+            
+        await main_content.display_json(data)
 
     @on(Button.Pressed, "#btn-delete")
     async def handle_delete(self):
@@ -1929,30 +2017,17 @@ class RivenTUI(App):
                 self.notify(f"Could not find TVDB ID for {main_content.tmdb_details.get('name')} to scrape.", severity="error")
                 return
         await self.start_spinner("Discovering streams...")
-        log_screen = ScrapeLogScreen()
-        self.push_screen(log_screen)
-        log_widget = log_screen.query_one(Log)
-        all_streams = {}
-        try:
-            async for line in self.api.scrape_stream(media_type, tmdb_id, self.settings.get("riven_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape):
-                if line.startswith("data:"):
-                    data_content = line[len("data:"):
-].strip()
-                    if data_content == "[DONE]":
-                        break
-                    try:
-                        message_data = json.loads(data_content)
-                        if 'message' in message_data:
-                            log_widget.write_line(f"-> {message_data['message']}")
-                        if 'streams' in message_data and message_data['streams']:
-                            all_streams.update(message_data['streams'])
-                    except json.JSONDecodeError:
-                        continue
-                elif line.startswith("error:"):
-                    log_widget.write_line(f"ERROR: {line}")
-        except Exception as e:
-            log_widget.write_line(f"Unexpected error: {e}")
-        self.app.pop_screen() 
+        log_screen = ScrapeLogScreen(media_type, tmdb_id, self.settings.get("riven_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape)
+        all_streams = await self.push_screen_wait(log_screen)
+        
+        if not all_streams:
+            # We don't notify here because ScrapeLogScreen or the next block handles it
+            pass
+        else:
+            # In case it returned None from a cancel
+            if not isinstance(all_streams, dict):
+                all_streams = {}
+
         streams = list(all_streams.values())
         if not streams:
             self.notify("No streams found.", severity="warning")

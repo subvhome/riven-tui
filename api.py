@@ -7,7 +7,12 @@ class RivenAPI:
     MDBLIST_API_KEY = "kgx75hvk95is39a6joe68tgux"
 
     def __init__(self, be_base_url, timeout=10.0):
-        self.client = httpx.AsyncClient(follow_redirects=True, timeout=timeout)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Referer": f"{be_base_url}/scalar"
+        }
+        self.client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers=headers)
         self.be_base_url = be_base_url
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.mdblist_base_url = "https://api.mdblist.com"
@@ -64,10 +69,12 @@ class RivenAPI:
             self.logger.error(f"BULK_ACTION_EXCEPTION: {e}")
             return False, str(e)
 
-    async def get_item_by_id(self, media_type: str, media_id: str, riven_key: str):
+    async def get_item_by_id(self, media_type: str, media_id: str, riven_key: str, extended: bool = False):
         url = f"{self.be_base_url}/api/v1/items/{media_id}"
         headers = {"x-api-key": riven_key}
         params = {"media_type": media_type}
+        if extended:
+            params["extended"] = "true"
         self.logger.info(f"get_item_by_id: URL={url}, Params={params}")
         try:
             resp = await self.client.get(url, headers=headers, params=params)
