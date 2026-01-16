@@ -195,17 +195,17 @@ class MediaCardScreen(ModalScreen):
 
     @on(Button.Pressed, "#btn-print-json-modal")
     async def handle_print_json(self):
-        item = self.riven_data
-        item_id = item.get("id") if item else None
+        tmdb_id = self.tmdb_data.get("id")
+        tvdb_id = self.tmdb_data.get("external_ids", {}).get("tvdb_id")
         
-        if item_id:
-            await self.app.start_spinner("Fetching extended Riven data...")
-            media_type = item.get("type", "movie")
-            extended_data = await self.api.get_item_by_id(media_type, str(item_id), self.settings.get("riven_key"), extended=True)
-            self.app.stop_spinner()
-            data = extended_data or item
-        else:
-            data = {"info": "Item not in Riven library"}
+        media_type = "tv" if self.media_type == "tv" else "movie"
+        external_id = str(tvdb_id) if media_type == "tv" and tvdb_id else str(tmdb_id)
+
+        await self.app.start_spinner("Fetching extended Riven data...")
+        extended_data = await self.api.get_item_by_id(media_type, external_id, self.settings.get("riven_key"), extended=True)
+        self.app.stop_spinner()
+        
+        data = extended_data or self.riven_data or {"info": "Item not in Riven library"}
 
         media_container = self.query_one("#modal-media-container")
         json_container = self.query_one("#modal-json-container")
@@ -749,9 +749,13 @@ class MainContent(Vertical):
 
     @on(Button.Pressed, "#btn-back-to-actions")
     async def handle_back_to_actions(self):
+        self.reset_view()
+
+    def reset_view(self):
         self.query_one("#main-content-container").remove_class("hidden")
         self.query_one("#main-content-json-container").add_class("hidden")
         self.query_one("#btn-back-to-actions").add_class("hidden")
+        self.query_one("#main-content-title").display = False
 
 class LogsView(Vertical):
     filter_query = reactive("")
@@ -1163,6 +1167,9 @@ class RivenTUI(App):
         dashboard_wrapper.display = False
         advanced_view.display = False
         logs_view.display = False
+
+        # Reset MainContent visibility state (exit JSON view if active)
+        main_content.reset_view()
 
         # Update Tab Classes
         for btn in self.query("#header-bar Button"):
@@ -1944,19 +1951,22 @@ class RivenTUI(App):
     @on(Button.Pressed, "#btn-print-json")
     async def handle_print_json(self):
         main_content = self.query_one(MainContent)
-        item = main_content.item_details
+        tmdb_details = main_content.tmdb_details
         
-        if item and item.get("id"):
-            item_id = item.get("id")
-            media_type = item.get("type", "movie")
+        if tmdb_details:
+            tmdb_id = tmdb_details.get("id")
+            tvdb_id = tmdb_details.get("external_ids", {}).get("tvdb_id")
+            
+            media_type = "tv" if main_content.item_data.get("media_type") == "tv" else "movie"
+            external_id = str(tvdb_id) if media_type == "tv" and tvdb_id else str(tmdb_id)
             
             await self.start_spinner("Fetching extended Riven data...")
-            extended_data = await self.api.get_item_by_id(media_type, str(item_id), self.settings.get("riven_key"), extended=True)
+            extended_data = await self.api.get_item_by_id(media_type, external_id, self.settings.get("riven_key"), extended=True)
             self.stop_spinner()
             
-            data = extended_data or item
+            data = extended_data or main_content.item_details or {"info": "Item not in Riven library"}
         else:
-            data = {"info": "Item not in Riven library"}
+            data = {"info": "No TMDB details available"}
             
         await main_content.display_json(data)
 
