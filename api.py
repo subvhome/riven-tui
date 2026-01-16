@@ -43,6 +43,26 @@ class RivenAPI:
         except Exception as e:
             return None, str(e)
 
+    async def get_mdblist_item_by_external_id(self, source: str, external_id: str):
+        # source: tvdb or tmdb
+        url = f"{self.mdblist_base_url}/{source}/show/{external_id}"
+        if source == "tmdb":
+             url = f"{self.mdblist_base_url}/{source}/movie/{external_id}"
+             # MDBList uses /tmdb/movie or /tmdb/show but often /tmdb/ is enough if type is known.
+             # Actually, for the general case:
+             url = f"{self.mdblist_base_url}/{source}/{external_id}"
+
+        params = {"apikey": self.MDBLIST_API_KEY}
+        self.logger.info(f"get_mdblist_item: URL={url}")
+        
+        try:
+            resp = await self.client.get(url, params=params)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Mdblist error: {resp.status_code}"
+        except Exception as e:
+            return None, str(e)
+
     async def bulk_action(self, action: str, item_ids: List[str], riven_key: str):
         # action: remove, reset, retry
         url = f"{self.be_base_url}/api/v1/items/{action}"
@@ -360,6 +380,7 @@ class RivenAPI:
                         "title": item.get("title") or item.get("name"),
                         "release_date": item.get("release_date") or item.get("first_air_date"),
                         "popularity": item.get("popularity"),
+                        "vote_average": item.get("vote_average"),
                         "vote_count": item.get("vote_count"),
                         "overview": item.get("overview")
                     }
