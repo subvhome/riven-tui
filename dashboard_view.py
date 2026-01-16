@@ -76,7 +76,7 @@ class DashboardView(Vertical):
         else:
             self.remove_class("-stacked")
 
-    async def update_recently_added(self, items: list):
+    async def update_recently_added(self, items: list, ratings: dict = None):
         """Update the left tile with recently added items."""
         tile = self.query_one("#db-tile-left", Vertical)
         await tile.query("*").remove()
@@ -88,10 +88,26 @@ class DashboardView(Vertical):
             if aired_at and len(aired_at) >= 4:
                 year = f" ({aired_at[:4]})"
             
+            # Use TMDB ID or TVDB ID as the key for the ratings dictionary
+            item_id = str(
+                item.get("tmdb_id") or 
+                (item.get("parent_ids") or {}).get("tmdb_id") or 
+                item.get("tvdb_id") or 
+                (item.get("parent_ids") or {}).get("tvdb_id") or ""
+            )
+            
+            rating_val = 0
+            if ratings and item_id in ratings:
+                rating_val = ratings[item_id]
+            else:
+                rating_val = item.get("vote_average", 0)
+
+            rating = f" [#D4AF37]{rating_val:.1f}[/]" if rating_val > 0 else ""
+
             media_type = item.get("type", "movie")
             icon = "🎞️ " if media_type == "movie" else "📺"
             
-            await tile.mount(self.DashboardItem(f"{icon} {title}{year}", item, source="library", show_add=False))
+            await tile.mount(self.DashboardItem(f"{icon} {title}{year}{rating}", item, source="library", show_add=False))
 
     async def update_trending(self, items: list, library_status: dict = None):
         """Update the right tile with trending items."""
@@ -105,6 +121,9 @@ class DashboardView(Vertical):
             if release_date and len(release_date) >= 4:
                 year = f" ({release_date[:4]})"
             
+            rating_val = item.get("vote_average", 0)
+            rating = f" [#D4AF37]{rating_val:.1f}[/]" if rating_val > 0 else ""
+
             media_type = item.get("media_type", "movie")
             icon = "🎞️ " if media_type == "movie" else "📺"
             
@@ -114,7 +133,7 @@ class DashboardView(Vertical):
             if library_status and tmdb_id in library_status:
                 exists = library_status[tmdb_id]
             
-            await tile.mount(self.DashboardItem(f"{icon} {title}{year}", item, source="trending", show_add=not exists))
+            await tile.mount(self.DashboardItem(f"{icon} {title}{year}{rating}", item, source="trending", show_add=not exists))
 
     async def update_service_pills(self, services: dict, settings: dict):
         """Update the service pills bar based on health and settings."""

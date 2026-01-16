@@ -1125,7 +1125,9 @@ class RivenTUI(App):
         
         # Update recently added
         if recent_resp and recent_resp[0]:
-            await dashboard_view.update_recently_added(recent_resp[0].get("items", []))
+            recent_items = recent_resp[0].get("items", [])
+            await dashboard_view.update_recently_added(recent_items)
+            self.run_worker(self._fetch_recent_ratings(recent_items))
             
         # Update trending
         if trending_resp and trending_resp[0]:
@@ -1562,6 +1564,47 @@ class RivenTUI(App):
             self.run_worker(self.refresh_dashboard())
         else:
             self.notify(f"Failed to add '{title}': {response}", severity="error")
+
+    async def _fetch_recent_ratings(self, items: list):
+        """Background task to fetch ratings for recently added items."""
+        dashboard_view = self.query_one(DashboardView)
+        tmdb_token = self.settings.get("tmdb_bearer_token")
+        ratings_map = {}
+        
+        async def fetch_item_rating(item):
+            # 1. Identify existing IDs
+            tmdb_id = item.get("tmdb_id") or (item.get("parent_ids") or {}).get("tmdb_id")
+            tvdb_id = item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id")
+            media_type = item.get("type", "movie")
+            
+            # Key to use for dashboard mapping
+            item_key = str(tmdb_id or tvdb_id or "")
+            if not item_key:
+                return None, 0
+
+            resolved_tmdb_id = tmdb_id
+
+            # 2. If TMDB ID is missing (common for shows), use MDBList to resolve it via TVDB ID
+            if not resolved_tmdb_id and tvdb_id and media_type == "show":
+                details, err = await self.api.get_mdblist_item_by_external_id("tvdb", str(tvdb_id))
+                if details and "ids" in details:
+                    resolved_tmdb_id = details["ids"].get("tmdb")
+
+            # 3. Once we have a TMDB ID, fetch the official rating from TMDB
+            if resolved_tmdb_id:
+                details, err = await self.api.get_tmdb_details("tv" if media_type == "show" else "movie", resolved_tmdb_id, tmdb_token)
+                if details:
+                    return item_key, details.get("vote_average", 0)
+            
+            return None, 0
+
+        results = await asyncio.gather(*(fetch_item_rating(i) for i in items))
+        for key, rating in results:
+            if key:
+                ratings_map[key] = rating
+        
+        if ratings_map:
+            await dashboard_view.update_recently_added(items, ratings=ratings_map)
 
     async def _check_trending_library_status(self, trending_items: list):
         """Background task to check if trending items are in Riven library."""
