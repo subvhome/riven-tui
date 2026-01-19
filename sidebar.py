@@ -5,9 +5,12 @@ from textual.message import Message
 from textual import on
 from typing import List, Dict
 import calendar
+from search_results import SearchResultItem
+from search import SearchArea
 
 class Sidebar(Container):
     def compose(self) -> ComposeResult:
+        yield SearchArea(id="sidebar-search")
         yield Static("", id="sidebar-title")
         
         # 1. Main List Container (for Search Results, etc)
@@ -59,9 +62,6 @@ class Sidebar(Container):
                 yield Label("Page:")
                 yield Input("1", placeholder="Page", id="lib-filter-page")
 
-                with Horizontal(classes="checkbox-row"):
-                    yield Checkbox("Count Only", id="lib-filter-count-only", value=False)
-
             yield Button("Apply Filters", id="btn-apply-filters", variant="success")
             yield Vertical(id="sidebar-lib-pagination")
 
@@ -112,12 +112,18 @@ class Sidebar(Container):
 
     def _hide_all(self) -> None:
         self.query_one("#sidebar-title", Static).update("")
+        self.query_one("#sidebar-search").add_class("hidden")
         self.query_one("#sidebar-list-container").add_class("hidden")
         self.query_one("#sidebar-filters-container").add_class("hidden")
         self.query_one("#sidebar-calendar-container").add_class("hidden")
 
     def show_blank(self) -> None:
         self._hide_all()
+
+    def show_search(self) -> None:
+        self._hide_all()
+        self.query_one("#sidebar-search").remove_class("hidden")
+        self.query_one("#sidebar-search #search-input").focus()
 
     def show_library_filters(self) -> None:
         self._hide_all()
@@ -141,11 +147,7 @@ class Sidebar(Container):
             lv.extend([ListItem(Label("No Results Found"))])
         else:
             for item in results:
-                m_type = item.get('media_type', 'unknown')
-                title = item.get('title') or item.get('name') or 'Unknown'
-                li = ListItem(Label(f"({m_type}) {title}"))
-                li.item_data = item
-                lv.append(li)
+                lv.append(SearchResultItem(item))
 
     def get_filter_values(self) -> dict:
         return {
@@ -155,5 +157,4 @@ class Sidebar(Container):
             "sort": self.query_one("#lib-filter-sort", Select).value,
             "limit": self.query_one("#lib-filter-limit", Select).value,
             "page": self.query_one("#lib-filter-page", Input).value,
-            "count_only": self.query_one("#lib-filter-count-only", Checkbox).value,
         }

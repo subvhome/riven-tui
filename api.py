@@ -382,7 +382,10 @@ class RivenAPI:
                         "popularity": item.get("popularity"),
                         "vote_average": item.get("vote_average"),
                         "vote_count": item.get("vote_count"),
-                        "overview": item.get("overview")
+                        "overview": item.get("overview"),
+                        "tagline": item.get("tagline"),
+                        "genre_ids": item.get("genre_ids", []),
+                        "original_language": item.get("original_language")
                     }
                     processed_results.append(processed)
                 return (processed_results, None)
@@ -468,6 +471,33 @@ class RivenAPI:
             return None, f"Status: {resp.status_code}"
         except Exception as e:
             return None, str(e)
+
+    async def get_tmdb_genres(self, token: str):
+        if not token or token == "YOUR_TOKEN_HERE":
+            return {}, "TMDB Bearer Token not configured"
+        
+        genres_map = {}
+        headers = {"Authorization": f"Bearer {token}", "accept": "application/json"}
+        
+        try:
+            # Fetch Movie Genres
+            movie_url = f"{self.tmdb_base_url}/genre/movie/list"
+            m_resp = await self.client.get(movie_url, headers=headers)
+            if m_resp.status_code == 200:
+                for g in m_resp.json().get("genres", []):
+                    genres_map[g["id"]] = g["name"]
+            
+            # Fetch TV Genres
+            tv_url = f"{self.tmdb_base_url}/genre/tv/list"
+            t_resp = await self.client.get(tv_url, headers=headers)
+            if t_resp.status_code == 200:
+                for g in t_resp.json().get("genres", []):
+                    genres_map[g["id"]] = g["name"]
+                    
+            return genres_map, None
+        except Exception as e:
+            self.logger.error(f"get_tmdb_genres Error: {e}")
+            return {}, str(e)
 
     async def get_services(self, riven_key: str):
         url = f"{self.be_base_url}/api/v1/services"

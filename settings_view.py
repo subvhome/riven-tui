@@ -6,7 +6,7 @@ from textual.widgets import Tree, Static, Input, Button, Label, Switch, Select, 
 from textual.message import Message
 from textual.widgets.tree import TreeNode
 
-class SettingsView(Container):
+class SettingsView(Vertical):
     """A view for browsing and editing nested settings."""
 
     class SettingsChanged(Message):

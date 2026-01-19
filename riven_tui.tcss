@@ -29,101 +29,77 @@ Button {
 
 /* Header */
 #header-bar {
-    height: 1;
-    background: transparent;
+    height: 3;
+    background: #24243E; /* Slightly lighter navy for the 'back' of the tabs */
     padding: 0 1;
     margin: 0;
-    overflow: hidden;
+    layout: horizontal;
+    align: left middle;
 }
 
-#header-bar Button {
-    height: 1;
-    min-width: 10;
+.menu-button {
+    height: 3;
+    width: auto;
+    min-width: 12;
+    padding: 0 2;
     margin: 0;
-    padding: 0 1;
-    border: none;
-    background: transparent;
     color: #777;
-}
-
-#header-bar Button:hover {
-    background: #3D5A80;
-    color: #F0F0F0;
-}
-
-#header-bar Button:focus {
+    content-align: center middle;
     background: transparent;
-    color: #AAA;
-    text-style: underline;
 }
 
-#header-bar Button.-active,
-#header-bar Button.-active:focus,
-#header-bar Button.-active:hover {
-    background: #3D5A80 !important;
-    color: #F0F0F0 !important;
+.menu-button:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #AAA;
+}
+
+.menu-button.-active {
+    background: #1A1A2E; /* MATCHES workspace background */
+    color: #FFF;
     text-style: bold;
 }
 
 #header-title {
     content-align: right middle;
+    height: 3;
     width: 1fr;
     color: #3D5A80;
     text-style: italic;
     padding-right: 1;
 }
 
-/* Search Subheader */
-#search-subheader {
-    height: 1;
-    padding: 0;
-    margin: 0;
+/* Search Integrated in Sidebar */
+#sidebar-search {
+    height: 3;
+    padding: 1 1;
+    margin-bottom: 1;
+    background: transparent;
 }
 
-#search-bar-row {
-    height: 1;
-    align: left middle;
-}
-
-#search-label {
-    display: none; /* Hide the "SEARCH:" label */
-}
-
-#search-input {
+#sidebar-search #search-input {
     width: 100%;
+    height: 1;
     border: none;
     background: #2C3E50;
     color: #F0F0F0;
-    height: 1;
     padding: 0 1;
 }
 
-/* Workspace */
-#workspace {
-    height: 1fr;
+#sidebar-search #search-label {
+    display: none;
 }
 
-#welcome-message {
-    content-align: center middle;
-    height: 100%;
-    background: #1A1A2E;
-}
-
-/* Main Area */
-#main-area {
-    height: 1fr;
-}
-
+/* Sidebar Overhaul */
 #sidebar {
     width: 40;
-    background: #1A1A2E; 
-    border-right: tall #3D5A80;
+    background: #141424; /* Darker, separate from main content */
+    border: none;
 }
 
 #sidebar-title {
     text-style: bold;
-    background: #1A1A2E;
-    color: #F0F0F0;
+    background: transparent;
+    color: #BE95C4;
     content-align: center middle;
     height: 3;
 }
@@ -143,10 +119,29 @@ Button {
     color: #888;
 }
 
-#sidebar-filters-container Input, #sidebar-filters-container Select {
+#sidebar-filters-container Input {
     margin-bottom: 1;
     background: #2C3E50;
     border: none;
+    height: 1;
+}
+
+#sidebar-filters-container Select {
+    margin-bottom: 1;
+    background: #2C3E50;
+    border: none;
+    height: 1; /* Clip the parent height */
+}
+
+#sidebar-filters-container Select SelectCurrent {
+    height: 3;
+    border: none;
+    background: #2C3E50;
+}
+
+#lib-filter-search, #lib-filter-page {
+    height: 1;
+    padding: 0 1;
 }
 
 .checkbox-row {
@@ -177,10 +172,46 @@ Button {
     align: center top;
 }
 
-#main-content-container, #main-content-json-container, #modal-json-container { 
+/* Prevent double scroll when media details are shown */
+MainContent.media-details-active #main-content-scroll-area {
+    overflow-y: hidden;
+}
+
+/* Re-enable scroll in stacked mode */
+MainContent.media-details-active.-stacked #main-content-scroll-area {
+    overflow-y: auto;
+}
+
+#main-content-container {
+    height: auto;
+    width: 100%;
+}
+
+#modal-json-container { 
     height: auto; 
-    width: 80; /* Prevents stretching */
+    width: 80; /* Prevents stretching in modals */
     margin: 2 0; 
+}
+
+/* Allow media details to fill height */
+MainContent.media-details-active #main-content-container {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+}
+
+/* Revert to auto height in stacked mode */
+MainContent.media-details-active.-stacked #main-content-container {
+    height: auto;
+    width: 100%;
+    margin: 2 0;
+}
+
+#main-content-json-container {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    overflow-y: auto;
 }
 
 #modal-json-container Static, #main-content-json-container Static {
@@ -205,7 +236,7 @@ Button {
 
 #debug-log {
     height: 10;
-    border-top: heavy #3D5A80;
+    border-top: round #3D5A80;
     background: #1A1A2E;
 }
 
@@ -214,11 +245,6 @@ Button {
     text-style: bold underline;
     color: #BE95C4;
     margin-bottom: 1;
-}
-
-#main-content-container {
-    height: auto;
-    width: 100%;
 }
 
 #log-view-layout {
@@ -261,7 +287,62 @@ Button {
     color: #BE95C4;
 }
 
-/* Media Card Styles */
+/* Media Card Styles (Split Pane) */
+.media-detail-layout {
+    layout: horizontal;
+    height: 1fr;
+    width: 100%;
+    margin-top: 1;
+}
+
+.media-info-column {
+    width: 25fr;
+    height: 100%;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+.media-action-column {
+    width: 75fr;
+    height: 100%;
+    background: #141424; /* Subtle dark tint for the action area */
+    padding: 0;
+    align: center top;
+    overflow-y: auto;
+}
+
+.media-action-column .media-button-bar {
+    dock: top;
+    height: 3;
+    width: 100%;
+    background: #252538; /* Distinct "header" tint for buttons */
+    margin-bottom: 0;
+    padding: 0 1;
+}
+
+/* Stacked fallback for narrow screens */
+.media-detail-layout.-stacked {
+    layout: vertical;
+    height: auto;
+}
+.media-detail-layout.-stacked .media-info-column, 
+.media-detail-layout.-stacked .media-action-column {
+    width: 100%;
+    height: auto;
+    padding: 1;
+}
+.media-detail-layout.-stacked .media-action-column .media-button-bar {
+    dock: none;
+    height: auto;
+    background: transparent;
+    border-top: solid #3D5A80;
+    margin-top: 1;
+}
+.media-detail-layout.-stacked .media-action-column {
+    background: transparent;
+    margin-top: 1;
+}
+
 .media-title {
     text-style: bold;
     margin-bottom: 1;
@@ -275,10 +356,9 @@ Button {
 
 .media-button-bar {
     layout: horizontal;
-    height: auto;
-    min-height: 3;
-    margin-bottom: 1;
+    height: 3;
     overflow-x: hidden;
+    align: center middle;
 }
 
 .media-button-bar Button {
@@ -288,6 +368,45 @@ Button {
     padding: 0 1;
     border: none;
     text-align: center;
+}
+
+.media-button-bar Button.error {
+    background: #E57373;
+}
+
+.media-button-bar Button.warning {
+    background: #F4D35E;
+}
+
+.media-button-bar Button.success {
+    background: #6A994E;
+}
+
+#btn-reset, #btn-retry, #btn-manual-scrape, #btn-print-json {
+    background: #434343;
+}
+
+.media-metadata {
+    color: #B0B0B0;
+    margin-bottom: 1;
+}
+
+.media-genres {
+    color: #B0B0B0;
+    margin-bottom: 1;
+}
+
+.media-overview {
+    margin-bottom: 1;
+}
+
+#poster-display {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    margin: 0;
+    padding: 1 0;
+    background: #0F0F1A; /* Even darker "board" for the poster */
 }
 
 .media-button-bar Button.error {
@@ -334,17 +453,46 @@ ListView, ListItem {
 }
 
 ListItem {
-    height: 3;
+    height: 4;
     padding: 0;
     margin: 0;
     border: none;
+    background: #141424;
+}
+
+ListItem:even {
+    background: #1C1C2E; /* Subtle alternating tint for sidebar items */
+}
+
+ListItem:hover {
+    background: #3D5A80 !important;
 }
 
 .sidebar-item-layout {
-    height: 3;
-    align: left middle;
+    height: 4;
     padding: 0 1;
     background: transparent;
+}
+
+.search-item-title {
+    color: #F0F0F0;
+    margin-top: 0;
+}
+
+.search-item-tagline {
+    color: #6A994E;
+    text-style: italic;
+    height: 1;
+}
+
+.search-item-meta {
+    color: #709fdc; /* Lighter blue for better visibility */
+    height: 1;
+}
+
+ListItem:hover .search-item-meta,
+ListItem:focus .search-item-meta {
+    color: #FFFFFF; /* High contrast when highlighted */
 }
 
 .sidebar-item-layout:hover {
@@ -361,7 +509,7 @@ ListItem {
     width:90;
     height: 90%;
     background: #1A1A2E;
-    border: tall #3D5A80;
+    border: round #3D5A80;
     padding: 1 2;
 }
 
@@ -391,25 +539,19 @@ ListItem {
     scrollbar-gutter: stable;
 }
 
-/* Library Item Card Styles */
+#library-list {
+    width: 100%;
+    height: auto;
+    background: transparent;
+}
+
+/* Library Item Card Styles - Shares layout with search results */
 .library-item-card {
-    border-left: solid #3D5A80;
-    padding: 0 1;
-    margin-bottom: 1;
-    width: 1fr;
-    height: 3;
-    align: left middle;
-    background: #2C3E50;
+    border-left: thick #3D5A80;
 }
 
 .library-item-card:hover {
-    background: #BE95C4;
-    color: #1A1A2E;
-    border-left: solid #F0F0F0;
-}
-
-.library-item-tv {
-    background: #34495E;
+    border-left: thick #F0F0F0;
 }
 
 /* Pagination Styles */
@@ -446,7 +588,7 @@ ListItem {
 }
 
 .input-error {
-    border: tall #E57373;
+    border: round #E57373;
 }
 
 .modal-popup {
@@ -463,7 +605,7 @@ ListItem {
     height: auto;
     padding: 2;
     background: #1A1A2E;
-    border: double #BE95C4;
+    border: round #BE95C4;
 }
 
 #update-title {
@@ -539,7 +681,7 @@ ListItem {
     height: 3;
     align: center middle;
     background: #1A1A2E;
-    border-bottom: heavy #3D5A80;
+    border-bottom: round #3D5A80;
     margin-bottom: 1;
     padding: 0 2;
 }
@@ -890,8 +1032,13 @@ ListItem {
 #adv-actions-row Button {
     margin-right: 2;
 }
+#settings-view {
+    width: 100%;
+    height: 100%;
+}
+
 #settings-container {
-    height: 1fr;
+    height: 100%;
     width: 100%;
 }
 
@@ -899,7 +1046,7 @@ ListItem {
     width: 30;
     height: 100%;
     background: #1A1A2E;
-    border-right: tall #3D5A80;
+    border-right: round #3D5A80;
 }
 
 #settings-sidebar-title {
@@ -908,7 +1055,7 @@ ListItem {
     color: #F0F0F0;
     padding: 1;
     text-style: bold;
-    border-bottom: solid #3D5A80;
+    border-bottom: round #3D5A80;
 }
 
 #settings-tree {
@@ -1047,7 +1194,7 @@ ListItem {
 #logs-display {
     height: 1fr;
     background: #1A1A2E;
-    border: tall #3D5A80;
+    border: round #3D5A80;
     margin-bottom: 1;
 }
 
@@ -1097,7 +1244,7 @@ ListItem {
     height: 3;
     margin-top: 5;
     background: transparent;
-    border: tall #3D5A80;
+    border: round #3D5A80;
     layout: horizontal;
     align: center middle;
     padding: 0 2;
@@ -1127,27 +1274,9 @@ ListItem {
 }
 
 .db-tile-header {
-    height: 1;
-    width: 100%;
-    background: #4A6FA5;
-    color: #F0F0F0;
-    text-style: bold;
-    content-align: center middle;
-}
-
-#db-tile-left-header {
     height: 2;
     background: transparent;
-    color: #BE95C4;
-    text-style: bold;
-    border-bottom: solid #3D5A80;
-    content-align: center top;
-}
-
-#db-tile-right-header {
-    height: 2;
-    background: transparent;
-    color: #BE95C4;
+    color: #BE95C4; /* Bubblegum color */
     text-style: bold;
     border-bottom: solid #3D5A80;
     content-align: center top;
@@ -1217,9 +1346,10 @@ ListItem {
     width: 60%;
     height: auto;
     margin-top: 2;
-    border: tall #3D5A80;
+    border: round #3D5A80;
     border-title-align: center;
     border-title-color: #BE95C4;
+    border-title-style: bold;
 }
 
 #db-service-pills {
@@ -1260,9 +1390,10 @@ ListItem {
     height: auto;
     margin-top: 4;
     margin-bottom: 5;
-    border: tall #3D5A80;
+    border: round #3D5A80;
     border-title-align: center;
     border-title-color: #BE95C4;
+    border-title-style: bold;
 }
 
 #db-states-grid {
@@ -1296,6 +1427,3 @@ ListItem {
 .state-failed .db-state-count { color: #E57373; }
 .state-paused .db-state-count { color: #F4D35E; }
 .state-indexed .db-state-count { color: #3D5A80; }
-
-
-
