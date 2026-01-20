@@ -54,11 +54,14 @@ class DashboardView(Vertical):
         )
         with Horizontal(id="db-data-row"):
             with Vertical(id="db-tile-left-wrapper", classes="db-tile-wrapper"):
-                yield Static("RECENTLY ADDED", id="db-tile-left-header", classes="db-tile-header")
+                with Horizontal(classes="db-tile-header"):
+                    yield Label("RECENTLY ADDED")
                 yield Vertical(id="db-tile-left", classes="db-data-tile")
             
             with Vertical(id="db-tile-right-wrapper", classes="db-tile-wrapper"):
-                yield Static("TRENDING", id="db-tile-right-header", classes="db-tile-header")
+                with Horizontal(classes="db-tile-header"):
+                    yield Label("TRENDING")
+                    yield Label("REQ", classes="db-tile-header-req")
                 yield Vertical(id="db-tile-right", classes="db-data-tile")
         with Vertical(id="db-pills-frame"):
             yield Vertical(id="db-service-pills")

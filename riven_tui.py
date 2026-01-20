@@ -34,6 +34,9 @@ import httpx
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
 
+class RefreshPoster(Message):
+    pass
+
 class UpdateScreen(ModalScreen[bool]):
     def __init__(self, remote_version: str, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
@@ -100,6 +103,8 @@ class UpdateScreen(ModalScreen[bool]):
             self.dismiss(False)
 
 class MediaCardScreen(ModalScreen):
+    last_chafa_width: Optional[int] = None
+
     def __init__(self, tmdb_data: dict, riven_data: dict, media_type: str, api: RivenAPI, settings: dict, chafa_available: bool):
         super().__init__(classes="centered-modal-screen")
         self.tmdb_data = tmdb_data
@@ -108,6 +113,7 @@ class MediaCardScreen(ModalScreen):
         self.api = api
         self.settings = settings
         self.chafa_available = chafa_available
+        self.post_message_debounce_timer = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-media-card"):
@@ -161,7 +167,7 @@ class MediaCardScreen(ModalScreen):
             ])
         action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success"))
         if not riven_data:
-            action_buttons.append(Button("Add to Library", id="btn-add-modal", variant="success"))
+            action_buttons.append(Button("Request", id="btn-add-modal", variant="success"))
         
         action_buttons.append(Button("Back", id="btn-back-to-dashboard", variant="primary"))
         action_buttons.append(Button("JSON", id="btn-print-json-modal"))
@@ -188,12 +194,40 @@ class MediaCardScreen(ModalScreen):
         if description:
             await container.mount(Static(description, classes="media-overview"))
             
-        # Render poster
+        # Render poster placeholder
         if self.chafa_available and tmdb_data.get("poster_path"):
-            poster_url = f"https://image.tmdb.org/t/p/w1280{tmdb_data['poster_path']}"
-            poster_art, error = await self.api.get_poster_chafa(poster_url, width=50)
+            await container.mount(Static(id="poster-display-modal"))
+            self.last_chafa_width = None
+            # Trigger initial re-measure
+            self.set_timer(0.1, lambda: self.post_message(RefreshPoster()))
+
+    async def on_resize(self, event) -> None:
+        if self.chafa_available and self.tmdb_data.get("poster_path"):
+            if self.post_message_debounce_timer:
+                self.post_message_debounce_timer.stop()
+            self.post_message_debounce_timer = self.set_timer(0.2, lambda: self.post_message(RefreshPoster()))
+
+    async def on_refresh_poster(self, message: RefreshPoster) -> None:
+        try:
+            poster_widget = self.query_one("#poster-display-modal", Static)
+            container = self.query_one("#modal-media-container")
+        except NoMatches:
+            return
+
+        # Measure container width
+        target_width = max(10, container.size.width - 8)
+        
+        # Honor max width setting
+        chafa_max_width = self.settings.get("chafa_max_width", 50)
+        if chafa_max_width > 0:
+            target_width = min(target_width, chafa_max_width)
+
+        if self.last_chafa_width is None or abs(target_width - self.last_chafa_width) > 2:
+            poster_url = f"https://image.tmdb.org/t/p/w1280{self.tmdb_data['poster_path']}"
+            poster_art, error = await self.api.get_poster_chafa(poster_url, width=target_width)
             if not error:
-                await container.mount(Static(Text.from_ansi(poster_art), id="poster-display"))
+                poster_widget.update(Text.from_ansi(poster_art))
+                self.last_chafa_width = target_width
 
     @on(Button.Pressed, "#btn-print-json-modal")
     async def handle_print_json(self):
@@ -565,9 +599,6 @@ class TitleSpinner:
         self._frame_index = (self._frame_index + 1) % len(self.SPINNER_FRAMES)
         self.title_widget.update(f"{self.base_title} - {self.message} {self.SPINNER_FRAMES[self._frame_index]}")
 
-
-class RefreshPoster(Message):
-    pass
 
 class CalendarItemSelected(Message):
     def __init__(self, item_data: dict) -> None:
@@ -1492,7 +1523,7 @@ class RivenTUI(App):
         
         action_buttons.append(Button("Manual Scrape", id="btn-manual-scrape", variant="success"))
         if not riven_data:
-            action_buttons.append(Button("Add to Library", id="btn-add", variant="success"))
+            action_buttons.append(Button("Request", id="btn-add", variant="success"))
         
         action_buttons.append(Button("Back", id="btn-back-to-library", variant="primary"))
         action_buttons.append(Button("JSON", id="btn-print-json"))
