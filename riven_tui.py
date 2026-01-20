@@ -10,7 +10,7 @@ import shutil
 from textual import on
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Label, Button, Log, Markdown, Select, Checkbox, ProgressBar, RichLog
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen
@@ -27,6 +27,7 @@ from advanced_view import AdvancedView
 from sidebar import Sidebar
 from search import SearchArea, SearchSubmitted
 from search_results import SearchResultItem, LibraryItemCard
+from search_grid import SearchGridTile, HOVER_DELAY
 from version import VERSION
 import subprocess
 import httpx
@@ -672,6 +673,15 @@ class MainContent(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Static(id="main-content-title")
+        
+        # New Search Grid View Components
+        with Vertical(id="centered-search-container", classes="hidden"):
+            yield Input(placeholder="Search TMDB...", id="grid-search-input")
+            yield Label(f"Hover over a tile for {HOVER_DELAY} seconds to preview poster", id="search-hover-hint")
+
+        with VerticalScroll(id="search-grid-scroll", classes="hidden"):
+            yield Container(id="search-grid-container")
+
         with Vertical(id="main-content-scroll-area"):
             yield Vertical(id="main-content-container")
             yield ListView(id="library-list", classes="hidden")
@@ -1143,8 +1153,13 @@ class RivenTUI(App):
         advanced_view.display = False
         logs_view.display = False
 
-        # Reset MainContent visibility state (exit JSON view if active)
+        # Reset MainContent visibility state
         main_content.reset_view()
+        
+        # New Search Grid Visibility Reset
+        main_content.query_one("#centered-search-container").add_class("hidden")
+        main_content.query_one("#search-grid-scroll").add_class("hidden")
+        main_content.query_one("#main-content-scroll-area").remove_class("hidden")
 
         # Update Tab Classes - Clean and precise
         for btn in self.query(".menu-button"):
@@ -1166,11 +1181,20 @@ class RivenTUI(App):
             advanced_view.display = True
         elif new_state == "search":
             main_area.display = True
-            sidebar.display = True 
-            sidebar.show_search()
+            sidebar.display = False # Hide sidebar for full width
             main_content.display = True 
-            main_content.query_one("#main-content-container").remove_children()
-            main_content.query_one("#main-content-title").display = False
+            
+            # Switch to Grid Mode
+            main_content.query_one("#main-content-scroll-area").add_class("hidden")
+            main_content.query_one("#centered-search-container").remove_class("hidden")
+            main_content.query_one("#search-grid-scroll").remove_class("hidden")
+            
+            # Focus Input
+            try:
+                self.query_one("#grid-search-input").focus()
+            except NoMatches:
+                pass
+
         elif new_state == "library":
             main_area.display = True
             sidebar.display = True 
@@ -1300,31 +1324,39 @@ class RivenTUI(App):
                     poster_widget.update(Text.from_ansi(poster_art))
                     main_content.last_chafa_width = target_width
 
+    @on(Input.Submitted, "#grid-search-input")
+    async def on_grid_search_submitted(self, event: Input.Submitted):
+        query = event.value.strip()
+        if query:
+            # We can just manually call handle_search with a faux message
+            await self.handle_search(SearchSubmitted(query=query))
+
     @on(SearchSubmitted)
     async def handle_search(self, message: SearchSubmitted):
+        self.log_message(f"SearchSubmitted received: {message.query}")
         self.app_state = "search" 
-        sidebar = self.query_one(Sidebar)
-        sidebar.query_one(ListView).clear() 
-
-        main_content = self.query_one(MainContent)
-        container = main_content.query_one("#main-content-container")
         
-        # Reset visibility
-        container.remove_class("hidden")
-        main_content.query_one("#main-content-json-container").add_class("hidden")
+        main_content = self.query_one(MainContent)
+        grid_container = main_content.query_one("#search-grid-container")
+        
+        # Reset visibility - ensure we are in grid mode
+        main_content.query_one("#main-content-scroll-area").add_class("hidden")
+        main_content.query_one("#centered-search-container").remove_class("hidden")
+        main_content.query_one("#search-grid-scroll").remove_class("hidden")
         main_content.query_one("#btn-back-to-actions").add_class("hidden")
 
-        await container.query("*").remove() 
-        main_content.query_one("#main-content-title").display = False
+        await grid_container.query("*").remove() 
 
         await self.start_spinner(f"Searching for '{message.query}'")
         results, error = await self.api.search_tmdb(message.query, self.settings.get("tmdb_bearer_token"))
         
         if error:
             self.stop_spinner()
+            self.log_message(f"TMDB Search Error: {error}")
             self.notify(f"TMDB Error: {error}", severity="error")
             return
 
+        self.log_message(f"TMDB found {len(results)} raw results.")
         results.sort(key=lambda x: x.get('popularity', 0) or 0, reverse=True)
         results = results[:20] # Keep top 20
 
@@ -1338,7 +1370,13 @@ class RivenTUI(App):
         detailed_results = await asyncio.gather(*(fetch_item_details(r) for r in results))
         
         self.stop_spinner()
-        sidebar.update_results(message.query, detailed_results)
+        self.log_message(f"Mounted {len(detailed_results)} tiles to grid.")
+        
+        if not detailed_results:
+            await grid_container.mount(Label("No results found."))
+        else:
+            for item in detailed_results:
+                await grid_container.mount(SearchGridTile(item, self.api))
 
     async def _render_poster(self, container: Container, tmdb_data: dict, width_hint: Optional[int] = None):
         if self.chafa_available and tmdb_data.get("poster_path"):
@@ -1499,6 +1537,44 @@ class RivenTUI(App):
         
         await self._refresh_current_item_data_and_ui(delay=0)
 
+    @on(SearchGridTile.Selected)
+    async def on_search_grid_tile_selected(self, message: SearchGridTile.Selected) -> None:
+        # Reuse dashboard item click logic for consistency
+        # Wrap it in a faux event-like object or call logic directly?
+        # Actually, let's just copy the logic or call a shared method.
+        # Calling shared method logic is cleaner.
+        
+        item = message.item_data
+        tmdb_id = item.get("id")
+        media_type = item.get("media_type", "movie")
+        
+        await self._open_media_card(tmdb_id, media_type)
+
+    async def _open_media_card(self, tmdb_id: int, media_type: str):
+        if not tmdb_id:
+            self.notify("Cannot open item: missing TMDB ID", severity="error")
+            return
+
+        # Fetch details and show modal
+        await self.start_spinner("Fetching details...")
+        tmdb_details, error = await self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token"))
+        if error:
+            self.stop_spinner()
+            self.notify(f"TMDB Error: {error}", severity="error")
+            return
+            
+        riven_media_type = "tv" if media_type == "tv" else "movie"
+        # For movies, Riven ID is TMDB ID. For shows, we might need TVDB ID.
+        riven_id_to_check = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
+        
+        riven_details = None
+        if riven_id_to_check:
+            riven_details = await self.api.get_item_by_id(riven_media_type, str(riven_id_to_check), self.settings.get("riven_key"))
+            
+        self.stop_spinner()
+        
+        self.push_screen(MediaCardScreen(tmdb_details, riven_details, media_type, self.api, self.settings, self.chafa_available))
+
     @on(DashboardView.DashboardItem.Clicked)
     async def on_dashboard_item_clicked(self, message: DashboardView.DashboardItem.Clicked) -> None:
         self.navigation_source = "dashboard"
@@ -1535,34 +1611,7 @@ class RivenTUI(App):
             tmdb_id = item.get("id")
             media_type = item.get("media_type", "movie")
 
-        if not tmdb_id:
-            self.notify("Cannot open item: missing TMDB ID", severity="error")
-            return
-
-        # Fetch details and show modal
-        await self.start_spinner("Fetching details...")
-        tmdb_details, error = await self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token"))
-        if error:
-            self.stop_spinner()
-            self.notify(f"TMDB Error: {error}", severity="error")
-            return
-            
-        riven_media_type = "tv" if media_type == "tv" else "movie"
-        riven_id_to_check = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
-        
-        riven_details = None
-        if riven_id_to_check:
-            riven_details = await self.api.get_item_by_id(riven_media_type, str(riven_id_to_check), self.settings.get("riven_key"))
-            
-        self.stop_spinner()
-        
-        # Set state for manual scrape integration
-        main_content = self.query_one(MainContent)
-        main_content.tmdb_details = tmdb_details
-        main_content.item_details = riven_details
-        main_content.item_data = {"id": tmdb_id, "media_type": media_type}
-
-        self.push_screen(MediaCardScreen(tmdb_details, riven_details, media_type, self.api, self.settings, self.chafa_available))
+        await self._open_media_card(tmdb_id, media_type)
 
     @on(DashboardView.DashboardItem.QuickAdd)
     async def on_dashboard_quick_add(self, message: DashboardView.DashboardItem.QuickAdd) -> None:

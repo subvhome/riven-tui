@@ -20,4 +20,3 @@ class SearchArea(Container):
         query_text = event.value.strip()
         if query_text:
             self.post_message(SearchSubmitted(query=query_text))
-            self.query_one(Input).value = ""
