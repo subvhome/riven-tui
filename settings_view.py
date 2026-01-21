@@ -39,9 +39,9 @@ class SettingsView(Vertical):
                     yield Button("Refresh", id="btn-refresh-settings", variant="primary")
 
     async def on_mount(self) -> None:
-        # Load data if not already present
+        # Load data if not already present, but do it silently on mount
         if not self.settings_data or not self.schema_data:
-            await self.on_refresh_settings()
+            self.run_worker(self.load_data(show_notification=False))
 
     async def load_schema(self) -> None:
         if not hasattr(self.app, "api"):
@@ -269,7 +269,11 @@ class SettingsView(Vertical):
 
     @on(Button.Pressed, "#btn-refresh-settings")
     async def on_refresh_settings(self) -> None:
-        self.notify("Loading...")
+        await self.load_data(show_notification=True)
+
+    async def load_data(self, show_notification: bool = True) -> None:
+        if show_notification:
+            self.notify("Loading...")
         if not hasattr(self.app, "api"): return
 
         await self.load_schema()
@@ -279,4 +283,5 @@ class SettingsView(Vertical):
             self.settings_data = resp
             self.build_tree(self.settings_data)
             self.query_one("#settings-form-container").remove_children()
-            self.notify("Updated.")
+            if show_notification:
+                self.notify("Updated.")

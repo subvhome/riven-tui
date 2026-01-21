@@ -350,9 +350,15 @@ MainContent.media-details-active.-stacked #main-content-container {
 }
 
 #debug-log {
-    height: 10;
-    border-top: round #3D5A80;
-    background: #1A1A2E;
+    dock: bottom;
+    height: 12;
+    border-top: round #BE95C4;
+    background: #0F0F1A;
+    display: none;
+}
+
+#debug-log.-visible {
+    display: block;
 }
 
 #main-content-title {

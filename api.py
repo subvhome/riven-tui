@@ -16,13 +16,8 @@ class RivenAPI:
         self.be_base_url = be_base_url
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.mdblist_base_url = "https://api.mdblist.com"
-        self.logger = logging.getLogger("RivenAPI")
-        if not self.logger.handlers:
-            handler = logging.FileHandler('api.log')
-            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+        self.logger = logging.getLogger("Riven.API")
+        self.logger.propagate = True
 
     async def get_mdblist_items(self, list_url_or_id: str):
         # Handle full URL or just the "user/listname" string
@@ -33,14 +28,17 @@ class RivenAPI:
         url = f"{self.mdblist_base_url}/lists/{path}/items/"
         params = {"apikey": self.MDBLIST_API_KEY}
         
-        self.logger.info(f"get_mdblist_items: URL={url}")
+        self.logger.debug(f"get_mdblist_items request: {url} with params {params}")
         
         try:
             resp = await self.client.get(url, params=params)
             if resp.status_code == 200:
+                self.logger.debug(f"get_mdblist_items success: {len(resp.json())} items found")
                 return resp.json(), None
+            self.logger.error(f"get_mdblist_items error: {resp.status_code} - {resp.text}")
             return None, f"Mdblist error: {resp.status_code} - {resp.text}"
         except Exception as e:
+            self.logger.error(f"get_mdblist_items exception: {e}", exc_info=True)
             return None, str(e)
 
     async def get_mdblist_item_by_external_id(self, source: str, external_id: str):
@@ -166,7 +164,7 @@ class RivenAPI:
         if states:
             params["states"] = states
         
-        self.logger.info(f"get_items: URL={url}, Params={params}, Headers={headers}")
+        self.logger.info(f"get_items: URL={url}, Params={params}")
 
         try:
             resp = await self.client.get(url, headers=headers, params=params, timeout=timeout)
@@ -236,7 +234,7 @@ class RivenAPI:
 
         headers = {"x-api-key": riven_key, "Accept": "text/event-stream"}
         
-        self.logger.info(f"scrape_stream: URL={url}, Params={params}, Headers={headers}")
+        self.logger.info(f"scrape_stream: URL={url}, Params={params}")
 
         try:
             async with self.client.stream("GET", url, headers=headers, params=params) as response:

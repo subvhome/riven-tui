@@ -900,6 +900,40 @@ class LogsView(Vertical):
                 self._refresh_timer.stop()
                 self._refresh_timer = None
 
+from search_grid import SearchGridTile, HOVER_DELAY
+
+class RedactingFormatter(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None, style='%', patterns=None):
+        super().__init__(fmt, datefmt, style)
+        self.patterns = patterns or []
+
+    def format(self, record):
+        msg = super().format(record)
+        for pattern in self.patterns:
+            if pattern:
+                msg = msg.replace(pattern, "********")
+        return msg
+
+    def set_patterns(self, patterns):
+        self.patterns = patterns
+
+class LogMessage(Message):
+    def __init__(self, message: str) -> None:
+        super().__init__()
+        self.message = message
+
+class TextualLogHandler(logging.Handler):
+    def __init__(self, app):
+        super().__init__()
+        self.app = app
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.app.post_message(LogMessage(msg))
+        except Exception:
+            self.handleError(record)
+
 class MenuButton(Static):
     def __init__(self, label: str, id: str):
         super().__init__(label, id=id, classes="menu-button")
@@ -923,15 +957,21 @@ class RivenTUI(App):
     def __init__(self):
         super().__init__()
         self.settings = {}
+        # Pre-load settings to get tokens for redaction
+        try:
+            with open("settings.json", "r") as f:
+                self.settings = json.load(f)
+        except:
+            pass
+
         self.previous_logs = ""
         self.chafa_available = False
         self.post_message_debounce_timer = None 
-        self.file_logger = logging.getLogger("RivenTUIFileLogger")
-        self.file_logger.setLevel(logging.INFO)
-        handler = RotatingFileHandler('riven_tui.log', maxBytes=1024*1024, backupCount=3)
-        formatter = logging.Formatter('%(asctime)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.file_logger.addHandler(handler)
+        
+        self.logger = logging.getLogger("Riven")
+        self.tui_logger = logging.getLogger("Riven.TUI")
+        self.tui_logger.propagate = True
+        
         self.spinner = None
         self._clear_notification_timer = None
         self.refresh_delay_seconds = 3.0
@@ -942,24 +982,40 @@ class RivenTUI(App):
         self.tmdb_genres: Dict[int, str] = {}
 
     def log_message(self, message: str):
+        self.tui_logger.info(message)
+
+    def reconfigure_redaction(self):
+        redact_patterns = []
+        if self.settings.get("riven_key"):
+            redact_patterns.append(self.settings["riven_key"])
+        if self.settings.get("tmdb_bearer_token"):
+            redact_patterns.append(self.settings["tmdb_bearer_token"])
+        
+        for handler in self.logger.handlers:
+            if hasattr(handler, "formatter") and isinstance(handler.formatter, RedactingFormatter):
+                handler.formatter.set_patterns(redact_patterns)
+
+    @on(SettingsView.SettingsChanged)
+    def on_settings_changed(self, message: SettingsView.SettingsChanged) -> None:
+        self.settings = message.new_settings
+        self.reconfigure_redaction()
+        # Save to file
         try:
-            log_widget = self.query_one("#debug-log", Log)
-            log_widget.write_line(message)
-        except NoMatches:
-            pass
-        self.file_logger.info(message)
+            with open("settings.json", "w") as f:
+                json.dump(self.settings, f, indent=4)
+        except Exception as e:
+            self.log_message(f"Error saving updated settings: {e}")
 
     def on_load(self) -> None: 
         try:
             with open("settings.json", "r") as f:
                 self.settings = json.load(f)
+            self.reconfigure_redaction()
         except Exception as e:
-            self.file_logger.error(f"Error loading settings.json: {e}")
-            self.settings = {}
+            # We don't use tui_logger yet because logging isn't fully set up in on_load usually
+            pass
         
         self.chafa_available = shutil.which("chafa") is not None
-        if not self.chafa_available:
-            self.log_message("chafa command not found, poster feature will be disabled.")
         
     def build_url(self, config_key: str) -> str:
         cfg = self.settings.get(config_key, {})
@@ -973,8 +1029,16 @@ class RivenTUI(App):
         
     def action_toggle_debug(self) -> None:
         try:
-            log_widget = self.query_one("#debug-log", Log)
-            log_widget.toggle_class("hidden")
+            log_widget = self.query_one("#debug-log")
+            log_widget.toggle_class("-visible")
+        except NoMatches:
+            pass
+
+    @on(LogMessage)
+    def on_log_message(self, message: LogMessage) -> None:
+        try:
+            log_widget = self.query_one("#debug-log", RichLog)
+            log_widget.write(message.message)
         except NoMatches:
             pass
 
@@ -1002,7 +1066,7 @@ class RivenTUI(App):
             yield AdvancedView(id="advanced-view")
             yield LogsView(id="logs-view")
 
-        yield Log(id="debug-log", highlight=True, classes="hidden")
+        yield RichLog(id="debug-log", highlight=True, markup=True, wrap=True, max_lines=1000)
 
         yield Footer()
 
@@ -1033,10 +1097,39 @@ class RivenTUI(App):
             self.log_message(f"Update check failed: {e}")
 
     async def on_mount(self) -> None:
+        # Setup unified logging in on_mount to ensure widgets are ready
+        log_level_str = self.settings.get("log_level", "INFO").upper()
+        log_level = getattr(logging, log_level_str, logging.INFO)
+        self.logger.setLevel(log_level)
+        
+        # Sensitive tokens to redact
+        redact_patterns = []
+        if self.settings.get("riven_key"):
+            redact_patterns.append(self.settings["riven_key"])
+        if self.settings.get("tmdb_bearer_token"):
+            redact_patterns.append(self.settings["tmdb_bearer_token"])
+
+        if not self.logger.handlers:
+            # File Handler
+            file_handler = RotatingFileHandler('riven.log', maxBytes=5*1024*1024, backupCount=3)
+            formatter = RedactingFormatter(
+                '%(asctime)s - [%(name)s] - %(levelname)s - %(message)s',
+                patterns=redact_patterns
+            )
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
+            
+            # Textual Handler
+            self.textual_handler = TextualLogHandler(self)
+            self.textual_handler.setFormatter(formatter)
+            self.logger.addHandler(self.textual_handler)
+
+        self.tui_logger.debug("on_mount called")
         self.log_message("App mounted. Starting startup worker.")
         self.run_worker(self.perform_startup())
 
     async def perform_startup(self) -> None:
+        self.tui_logger.debug("perform_startup worker started")
         import os
         import shutil
         if os.path.exists("y") and os.path.isdir("y"):
@@ -1044,7 +1137,7 @@ class RivenTUI(App):
                 shutil.rmtree("y")
                 self.log_message("Auto-Cleanup: Removed redundant 'y/' folder.")
             except Exception as e:
-                self.log_message(f"Auto-Cleanup Error (y/): {e}")
+                self.tui_logger.error(f"Auto-Cleanup Error (y/): {e}", exc_info=True)
 
         if "api_key" in self.settings and "riven_key" not in self.settings:
             self.settings["riven_key"] = self.settings.pop("api_key")
@@ -1053,10 +1146,12 @@ class RivenTUI(App):
                 with open("settings.json", "w") as f:
                     json.dump(self.settings, f, indent=4)
             except Exception as e:
-                self.log_message(f"Migration Error (Saving): {e}")
+                self.tui_logger.error(f"Migration Error (Saving): {e}", exc_info=True)
 
         if not self.chafa_available:
+            self.tui_logger.debug("Chafa not available, showing ChafaCheckScreen")
             if not await self.push_screen_wait(ChafaCheckScreen()):
+                self.tui_logger.info("ChafaCheckScreen returned False, exiting")
                 self.exit()
                 return
 
@@ -1064,21 +1159,27 @@ class RivenTUI(App):
             be_url = self.build_url("be_config")
             timeout = self.settings.get("request_timeout", 10.0)
 
+            self.tui_logger.debug(f"Initializing API with BE URL: {be_url}, timeout: {timeout}")
             self.api = RivenAPI(be_url, timeout=timeout)
             self.log_message(f"API Initialized: BE='{be_url}'")
             
             # Fetch Genres for Search View
+            self.tui_logger.debug("Fetching TMDB genres...")
             genre_map, err = await self.api.get_tmdb_genres(self.settings.get("tmdb_bearer_token"))
             if not err:
                 self.tmdb_genres = genre_map
                 self.log_message(f"TMDB Genres cached ({len(genre_map)} items)")
+            else:
+                self.tui_logger.error(f"Failed to fetch TMDB genres: {err}")
 
+            self.tui_logger.debug("Initializing TitleSpinner and setting initial state")
             self.spinner = TitleSpinner(self, self.base_title) 
             self.app_state = "welcome" # Cycle state to force watcher to fire
             self.app_state = "dashboard" 
+            self.tui_logger.debug("Startup worker completed, starting update check worker")
             self.run_worker(self.check_for_updates())
         except Exception as e:
-            self.log_message(f"Config Error: {e}")
+            self.tui_logger.error(f"Config Error during startup: {e}", exc_info=True)
             self.notify(f"Config Error: {e}", severity="error")
 
     async def on_unmount(self) -> None:
@@ -1116,9 +1217,10 @@ class RivenTUI(App):
             self.log_message("Dashboard: Awaiting parallel API tasks...")
             try:
                 results = await asyncio.gather(stats_task, health_task, recent_task, trending_task, services_task, settings_task, return_exceptions=True)
+                self.tui_logger.debug(f"Dashboard: Raw API results: {results}")
                 self.log_message(f"Dashboard: API tasks completed. Results count: {len(results)}")
             except Exception as e:
-                self.log_message(f"Dashboard: Error in asyncio.gather: {e}")
+                self.tui_logger.error(f"Dashboard: Error in asyncio.gather: {e}", exc_info=True)
                 return
             
             stats_resp = results[0] if not isinstance(results[0], Exception) else (None, str(results[0]))
@@ -1128,12 +1230,18 @@ class RivenTUI(App):
             services_resp = results[4] if not isinstance(results[4], Exception) else (None, str(results[4]))
             settings_resp = results[5] if not isinstance(results[5], Exception) else (None, str(results[5]))
             
+            if any(isinstance(r, Exception) for r in results):
+                for i, r in enumerate(results):
+                    if isinstance(r, Exception):
+                        self.tui_logger.error(f"Dashboard: Task {i} failed: {r}")
+
             stats_data = stats_resp[0] if stats_resp and stats_resp[0] else {}
             
             # Parse health response
             health_ok = False
             if health_resp and health_resp[0]:
                 health_ok = health_resp[0].get("message") == "True"
+                self.tui_logger.debug(f"Dashboard: Health status: {health_ok}")
             
             self.log_message("Dashboard: Updating UI components...")
             await dashboard_view.update_stats(stats_data, health_ok)
@@ -1141,38 +1249,48 @@ class RivenTUI(App):
             # Update recently added
             if recent_resp and recent_resp[0]:
                 recent_items = recent_resp[0].get("items", [])
+                self.tui_logger.debug(f"Dashboard: Found {len(recent_items)} recent items")
                 await dashboard_view.update_recently_added(recent_items)
                 self.run_worker(self._fetch_recent_ratings(recent_items))
                 
             # Update trending
             if trending_resp and trending_resp[0]:
+                trending_items = trending_resp[0]
+                self.tui_logger.debug(f"Dashboard: Found {len(trending_items)} trending items")
                 # Show the list immediately (as unknown status)
-                await dashboard_view.update_trending(trending_resp[0])
+                await dashboard_view.update_trending(trending_items)
                 # Trigger background check for library status
-                self.run_worker(self._check_trending_library_status(trending_resp[0]))
+                self.run_worker(self._check_trending_library_status(trending_items))
 
             # Update service pills
             if services_resp and services_resp[0] and settings_resp and settings_resp[0]:
+                self.tui_logger.debug("Dashboard: Updating service pills")
                 await dashboard_view.update_service_pills(services_resp[0], settings_resp[0])
 
             # Update distribution grid
             if stats_data.get("states"):
+                self.tui_logger.debug(f"Dashboard: Updating states overview: {stats_data['states']}")
                 await dashboard_view.update_states_overview(stats_data["states"])
             
             self.log_message("Dashboard: Refresh complete.")
         finally:
             self._refreshing_dashboard = False
+            self.stop_spinner()
 
     def watch_app_state(self, new_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced", "logs"]) -> None:
-        welcome_message = self.query_one("#welcome-message")
-        main_area = self.query_one("#main-area")
-        sidebar = self.query_one(Sidebar)
-        main_content = self.query_one(MainContent)
-        settings_view = self.query_one(SettingsView)
-        dashboard_view = self.query_one(DashboardView)
-        dashboard_wrapper = self.query_one("#dashboard-wrapper")
-        advanced_view = self.query_one(AdvancedView)
-        logs_view = self.query_one("#logs-view")
+        self.tui_logger.debug(f"App state changing to: {new_state}")
+        try:
+            welcome_message = self.query_one("#welcome-message")
+            main_area = self.query_one("#main-area")
+            sidebar = self.query_one(Sidebar)
+            main_content = self.query_one(MainContent)
+            settings_view = self.query_one(SettingsView)
+            dashboard_view = self.query_one(DashboardView)
+            dashboard_wrapper = self.query_one("#dashboard-wrapper")
+            advanced_view = self.query_one(AdvancedView)
+            logs_view = self.query_one("#logs-view")
+        except NoMatches:
+            return
 
         welcome_message.display = False
         main_area.display = False
@@ -1246,7 +1364,7 @@ class RivenTUI(App):
             sidebar.show_blank()
             main_area.display = True
             if not settings_view.settings_data:
-                settings_view.post_message(Button.Pressed(settings_view.query_one("#btn-refresh-settings")))
+                self.run_worker(settings_view.load_data())
         elif new_state == "logs":
             logs_view.display = True
             # Full width, no sidebar
@@ -1270,6 +1388,7 @@ class RivenTUI(App):
         self._clear_notification_timer = None
 
     async def start_spinner(self, message: str = "Loading...", interval: float = TitleSpinner.DEFAULT_INTERVAL):
+        self.tui_logger.debug(f"Starting spinner: {message}")
         if self._clear_notification_timer:
             self._clear_notification_timer.stop()
             self._clear_notification_timer = None
@@ -1277,11 +1396,15 @@ class RivenTUI(App):
             await self.spinner.start(message, interval)
 
     def stop_spinner(self):
+        self.tui_logger.debug("Stopping spinner")
         if self.spinner is not None:
             self.spinner.stop()
 
     async def on_resize(self, event) -> None: 
-        main_content = self.query_one(MainContent)
+        try:
+            main_content = self.query_one(MainContent)
+        except NoMatches:
+            return
         
         # Handle responsive stacking for media details
         try:

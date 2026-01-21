@@ -92,12 +92,18 @@ class Sidebar(Container):
         container = self.query_one("#calendar-grid-container")
         await container.query("*").remove()
         
-        # Header
-        header_labels = [Label(day, classes="grid-cell grid-header-cell") for day in ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]]
+        # Header - Dynamic based on locale
+        first_day = calendar.firstweekday()
+        days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+        # Reorder days based on first_day index
+        ordered_days = days[first_day:] + days[:first_day]
+        
+        header_labels = [Label(day, classes="grid-cell grid-header-cell") for day in ordered_days]
         await container.mount(Horizontal(*header_labels, classes="calendar-grid-row"))
         
-        # Weeks
-        cal = calendar.monthcalendar(year, month)
+        # Weeks - Dynamic based on locale
+        cal_obj = calendar.Calendar(firstweekday=first_day)
+        cal = cal_obj.monthdayscalendar(year, month)
         for week in cal:
             week_widgets = []
             for day in week:

@@ -81,6 +81,7 @@ class DashboardView(Vertical):
 
     async def update_recently_added(self, items: list, ratings: dict = None):
         """Update the left tile with recently added items."""
+        self.app.tui_logger.debug(f"DashboardView: Updating recently added with {len(items)} items")
         tile = self.query_one("#db-tile-left", Vertical)
         await tile.query("*").remove()
         
@@ -114,6 +115,7 @@ class DashboardView(Vertical):
 
     async def update_trending(self, items: list, library_status: dict = None):
         """Update the right tile with trending items."""
+        self.app.tui_logger.debug(f"DashboardView: Updating trending with {len(items)} items")
         tile = self.query_one("#db-tile-right", Vertical)
         await tile.query("*").remove()
         
@@ -140,6 +142,7 @@ class DashboardView(Vertical):
 
     async def update_service_pills(self, services: dict, settings: dict):
         """Update the service pills bar based on health and settings."""
+        self.app.tui_logger.debug("DashboardView: Updating service pills")
         container = self.query_one("#db-service-pills", Vertical)
         await container.query("*").remove()
         
