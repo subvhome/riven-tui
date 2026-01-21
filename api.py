@@ -4,9 +4,8 @@ import logging
 from typing import List, Optional
 
 class RivenAPI:
-    MDBLIST_API_KEY = "kgx75hvk95is39a6joe68tgux"
-
     def __init__(self, be_base_url, timeout=10.0):
+        self.mdblist_api_key = "kgx75hvk95is39a6joe68tgux"
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
             "Accept": "*/*",
@@ -26,16 +25,14 @@ class RivenAPI:
         # Ensure path is clean and ends with /items/
         path = path.strip("/")
         url = f"{self.mdblist_base_url}/lists/{path}/items/"
-        params = {"apikey": self.MDBLIST_API_KEY}
+        params = {"apikey": self.mdblist_api_key}
         
-        self.logger.debug(f"get_mdblist_items request: {url} with params {params}")
+        self.logger.debug(f"get_mdblist_items: URL={url}")
         
         try:
             resp = await self.client.get(url, params=params)
             if resp.status_code == 200:
-                self.logger.debug(f"get_mdblist_items success: {len(resp.json())} items found")
                 return resp.json(), None
-            self.logger.error(f"get_mdblist_items error: {resp.status_code} - {resp.text}")
             return None, f"Mdblist error: {resp.status_code} - {resp.text}"
         except Exception as e:
             self.logger.error(f"get_mdblist_items exception: {e}", exc_info=True)
@@ -43,15 +40,12 @@ class RivenAPI:
 
     async def get_mdblist_item_by_external_id(self, source: str, external_id: str):
         # source: tvdb or tmdb
-        url = f"{self.mdblist_base_url}/{source}/show/{external_id}"
+        url = f"{self.mdblist_base_url}/{source}/{external_id}"
         if source == "tmdb":
-             url = f"{self.mdblist_base_url}/{source}/movie/{external_id}"
-             # MDBList uses /tmdb/movie or /tmdb/show but often /tmdb/ is enough if type is known.
-             # Actually, for the general case:
-             url = f"{self.mdblist_base_url}/{source}/{external_id}"
+             url = f"{self.mdblist_base_url}/tmdb/movie/{external_id}"
 
-        params = {"apikey": self.MDBLIST_API_KEY}
-        self.logger.info(f"get_mdblist_item: URL={url}")
+        params = {"apikey": self.mdblist_api_key}
+        self.logger.debug(f"get_mdblist_item: URL={url}")
         
         try:
             resp = await self.client.get(url, params=params)
@@ -59,7 +53,46 @@ class RivenAPI:
                 return resp.json(), None
             return None, f"Mdblist error: {resp.status_code}"
         except Exception as e:
+            self.logger.error(f"get_mdblist_item exception: {e}", exc_info=True)
             return None, str(e)
+
+    async def resolve_tmdb_id(self, item: dict, token: str) -> Optional[int]:
+        """Attempts to find a TMDB ID for a Riven item using multiple strategies."""
+        # 1. Direct field
+        tmdb_id = item.get("tmdb_id")
+        if tmdb_id:
+            return int(tmdb_id)
+            
+        # 2. Parent IDs
+        if "parent_ids" in item:
+            tmdb_id = item["parent_ids"].get("tmdb_id")
+            if tmdb_id:
+                return int(tmdb_id)
+
+        # 3. External lookup (TVDB or IMDB)
+        media_type = item.get("type", "movie")
+        external_id = item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id")
+        source_type = "tvdb_id"
+        
+        if not external_id:
+            external_id = item.get("imdb_id") or (item.get("parent_ids") or {}).get("imdb_id")
+            source_type = "imdb_id"
+            
+        if not external_id:
+            # For shows, the Riven ID is often the TVDB ID
+            if media_type == "show":
+                external_id = item.get("id")
+                source_type = "tvdb_id"
+            # For movies, the Riven ID is often the TMDB ID
+            elif media_type == "movie":
+                return int(item.get("id"))
+
+        if external_id:
+            resolved_id, _ = await self.find_tmdb_id(str(external_id), source_type, token)
+            if resolved_id:
+                return int(resolved_id)
+                
+        return None
 
     async def bulk_action(self, action: str, item_ids: List[str], riven_key: str):
         # action: remove, reset, retry
@@ -324,15 +357,19 @@ class RivenAPI:
         except Exception as e:
             return None, str(e)
 
-    async def get_poster_chafa(self, poster_url: str, width: int = 80):
-        self.logger.info(f"Rendering poster from {poster_url} with width {width}")
+    async def get_poster_chafa(self, poster_url: str, width: int = 80, height: Optional[int] = None):
+        self.logger.debug(f"Rendering poster from {poster_url} with width {width} and height {height}")
         try:
             async with self.client.stream("GET", poster_url) as response:
                 if response.status_code != 200:
                     return None, f"Failed to download image: Status {response.status_code}"
 
+                size_arg = f"{width}x"
+                if height:
+                    size_arg = f"{width}x{height}"
+
                 chafa_process = await asyncio.create_subprocess_exec(
-                    "chafa", "--size", f"{width}x", "--colors", "256", "-",
+                    "chafa", "--size", size_arg, "--colors", "256", "-",
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE

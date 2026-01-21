@@ -12,9 +12,10 @@ Built for those who prefer staying in the shell, this TUI provides a visual way 
 - **Library Management**: Browse your collection with powerful filters (Type, State, Sort). View detailed metadata and manage items (Delete, Reset, Retry).
 - **Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping directly from the TUI.
 - **Live Logs**: A dedicated, full-screen log viewer with real-time updates, keyword filtering, and negation support.
+- **Debug Window**: A toggleable real-time technical log overlay (`Ctrl+T`) with automated redaction of sensitive API keys and tokens.
 - **Settings Editor**: A complete, tree-based configuration editor for your Riven backend settings.
 - **Advanced Management**: Mass-action suite for library maintenance. Scan external lists (like [Mdblist](https://mdblist.com/)) and bulk Delete, Reset, or Retry items in your library.
-- **Posters & Visuals**: High-resolution poster rendering using [chafa](https://hpjansson.org/chafa/).
+- **Posters & Visuals**: High-resolution poster rendering using [chafa](https://hpjansson.org/chafa/) with optimized aspect ratios for standard media posters.
 
 ## Installation
 
@@ -49,9 +50,9 @@ If you used the **Quick Install** script above, you can start the TUI in two way
 | :---: | :---: |
 | ![Library](assets/library.jpg) | ![Search](assets/search.jpg) |
 
-| Calendar |
-| :---: |
-| ![Calendar](assets/calendar.jpg) |
+| Media Detail | Calendar |
+| :---: | :---: |
+| ![Media Card](assets/search-mediacard.jpg) | ![Calendar](assets/calendar.jpg) |
 
 ## ⚙️ Advanced Features
 
@@ -60,7 +61,11 @@ The Advanced tab allows you to cross-reference your Riven library with external 
 - **Scan**: Paste a list ID or URL to find matching items in your library.
 - **Mass Action**: Delete, Reset, or Retry all matched items in a single batch.
 
-> **Note**: If you delete content that exists in other active lists (like [Overseerr](https://overseerr.dev/) or [Trakt](https://trakt.tv/)), Riven may automatically re-trigger the request and redownload the content. Monitor your Riven backend logs to ensure items are removed as expected.
+### Enriched Search & States
+Search results are automatically cross-referenced with your Riven library. Items already in your collection are badged with their current state (**Completed**, **Indexed**, **Scraped**, etc.) and color-coded for instant recognition.
+
+### Localized Calendar
+The calendar view automatically detects your system locale to set the first day of the week (e.g., Sunday for USA, Monday for France). TV events are formatted clearly with show titles and season/episode numbering.
 
 ## Configuration
 
@@ -70,12 +75,17 @@ Settings are managed in `settings.json`. The installer will prompt you for these
 - `tmdb_bearer_token`: [TMDB Read Access Token](https://www.themoviedb.org/settings/api) for search and discovery.
 - `be_config`: Connection details for your Riven backend.
 - `chafa_max_width`: Maximum width for poster rendering (default: 100).
+- `log_level`: Verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
 - `log_display_limit`: Number of lines to fetch on initial log load.
 - `log_refresh_interval`: Seconds between auto-refreshes in the log view.
 
 ## Controls
 
-The UI supports both keyboard and mouse. Use **Tab** to cycle focus, **Arrows** to navigate lists, and **Enter** to select.
+The UI supports both keyboard and mouse.
+- **Tab**: Cycle focus between widgets.
+- **Arrows**: Navigate lists and grids.
+- **Enter**: Select items.
+- **Ctrl + T**: Toggle the secure Debug Log overlay.
 
 ---
 Built with [Textual](https://github.com/Textualize/textual).

@@ -17,557 +17,31 @@ from textual.screen import ModalScreen
 from textual.reactive import reactive
 from textual.timer import Timer
 from rich.text import Text
-import rich.markup
 from rich.markup import escape
 
 from api import RivenAPI
 from settings_view import SettingsView
 from dashboard_view import DashboardView
 from advanced_view import AdvancedView
-from sidebar import Sidebar
-from search import SearchArea, SearchSubmitted
-from search_results import SearchResultItem, LibraryItemCard
 from search_grid import SearchGridTile, HOVER_DELAY
 from version import VERSION
+from messages import (
+    RefreshPoster, LogMessage, CalendarItemSelected, 
+    PageChanged, MonthChanged
+)
+from logs_view import LogsView
+from calendar_view import CalendarItemCard, CalendarHeader
+from sidebar import Sidebar, PaginationControl, FilterPill
+from search import SearchSubmitted
+from search_results import LibraryItemCard
+from modals import (
+    UpdateScreen, MediaCardScreen, ScrapeLogScreen, 
+    StreamSelectionScreen, FileMappingScreen, ChafaCheckScreen
+)
 import subprocess
 import httpx
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
-
-class RefreshPoster(Message):
-    pass
-
-class UpdateScreen(ModalScreen[bool]):
-    def __init__(self, remote_version: str, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
-        super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
-        self.remote_version = remote_version
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="update-container", classes="modal-popup"):
-            yield Static("✨ New Update Available", id="update-title")
-            yield Static(f"Version [bold]{self.remote_version}[/bold] is now available.\n(Current: {VERSION})\n\nWould you like to update now?", id="update-message")
-            
-            with Vertical(id="update-progress-container", classes="hidden"):
-                yield Label("Updating files...")
-                yield ProgressBar(total=100, id="update-bar")
-                yield Static("", id="update-details")
-
-            with Horizontal(id="update-buttons"):
-                yield Button("Update Now", id="btn-update-confirm", variant="success")
-                yield Button("Later", id="btn-update-cancel")
-
-    @on(Button.Pressed, "#btn-update-confirm")
-    async def on_confirm(self) -> None:
-        self.query_one("#update-buttons").display = False
-        container = self.query_one("#update-progress-container")
-        container.remove_class("hidden")
-        self.run_worker(self.perform_git_pull())
-
-    @on(Button.Pressed, "#btn-update-cancel")
-    def on_cancel(self) -> None:
-        self.dismiss(False)
-
-    async def perform_git_pull(self):
-        bar = self.query_one("#update-bar", ProgressBar)
-        details = self.query_one("#update-details", Static)
-        
-        try:
-            steps = [
-                ("Fetching...", ["git", "fetch", "--all"]),
-                ("Resetting...", ["git", "reset", "--hard", "origin/main"]),
-                ("Pulling...", ["git", "pull", "origin", "main"]),
-            ]
-            
-            for i, (msg, cmd) in enumerate(steps):
-                details.update(f"[yellow]{msg}[/]")
-                process = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                stdout, stderr = await process.communicate()
-                
-                if process.returncode != 0:
-                    raise Exception(stderr.decode().strip())
-                
-                bar.advance(33.3)
-
-            details.update("[bold green]Update successful![/]\n[cyan]The application will now exit.\nPlease relaunch to use the new version.")
-            await asyncio.sleep(3)
-            self.app.exit()
-            
-        except Exception as e:
-            self.app.log_message(f"Update Error: {e}")
-            details.update(f"[red]Update failed: {e}[/]")
-            await asyncio.sleep(5)
-            self.dismiss(False)
-
-class MediaCardScreen(ModalScreen):
-    last_chafa_width: Optional[int] = None
-
-    def __init__(self, tmdb_data: dict, riven_data: dict, media_type: str, api: RivenAPI, settings: dict, chafa_available: bool):
-        super().__init__(classes="centered-modal-screen")
-        self.tmdb_data = tmdb_data
-        self.riven_data = riven_data
-        self.media_type = media_type
-        self.api = api
-        self.settings = settings
-        self.chafa_available = chafa_available
-        self.post_message_debounce_timer = None
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="modal-media-card"):
-            with Vertical(id="modal-scroll-area", classes="scrollable-container"):
-                yield Vertical(id="modal-media-container")
-                yield Vertical(id="modal-json-container", classes="hidden")
-            yield Button("Back to Media", id="btn-back-from-json", variant="primary", classes="hidden")
-
-    async def on_mount(self):
-        container = self.query_one("#modal-media-container")
-        tmdb_data = self.tmdb_data
-        riven_data = self.riven_data
-        
-        title = tmdb_data.get('title') or tmdb_data.get('name', 'N/A')
-        year = (tmdb_data.get('release_date') or tmdb_data.get('first_air_date', 'N/A'))[:4]
-        tagline = tmdb_data.get('tagline')
-        
-        # Match show_item_actions logic for runtime
-        runtime_movie = tmdb_data.get('runtime', 0)
-        episode_run_time = None
-        if self.media_type == "tv":
-            episode_run_time_list = tmdb_data.get('episode_run_time', [])
-            if episode_run_time_list:
-                episode_run_time = f"{episode_run_time_list[0]} mins"
-
-        genres = " - ".join([genre.get('name') for genre in tmdb_data.get('genres', []) if genre.get('name')])
-        description = tmdb_data.get('overview')
-        status = tmdb_data.get('status')
-        
-        languages_spoken_list = [lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
-        if not languages_spoken_list and tmdb_data.get('original_language'):
-            languages_spoken_list.append(tmdb_data.get('original_language').upper())
-        languages_spoken = " - ".join(languages_spoken_list)
-
-        # 0. Status Label (Top)
-        status_text = f"In Library (Riven ID: {riven_data.get('id')})" if riven_data else "Not in Library"
-        await container.mount(Static(status_text, id="modal-status-label"))
-
-        # 1. Header & Tagline
-        await container.mount(Static(f"[bold]{title}[/bold]", classes="media-title"))
-        if tagline:
-            await container.mount(Static(f"[italic]{tagline}[/italic]", classes="media-tagline"))
-
-        # 2. Action Buttons Row
-        action_buttons = []
-        if riven_data:
-            action_buttons.extend([
-                Button("Delete", id="btn-delete-modal", variant="error"),
-                Button("Reset", id="btn-reset-modal", variant="warning"),
-                Button("Retry", id="btn-retry-modal", variant="primary"),
-            ])
-        action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success"))
-        if not riven_data:
-            action_buttons.append(Button("Request", id="btn-add-modal", variant="success"))
-        
-        action_buttons.append(Button("Back", id="btn-back-to-dashboard", variant="primary"))
-        action_buttons.append(Button("JSON", id="btn-print-json-modal"))
-        
-        await container.mount(Horizontal(*action_buttons, classes="media-button-bar", id="modal-button-row"))
-
-        # 3. Metadata Line
-        meta_items = [year]
-        if self.media_type == "movie" and runtime_movie:
-            meta_items.append(f"{runtime_movie} mins")
-        elif self.media_type == "tv" and episode_run_time:
-            meta_items.append(episode_run_time)
-            
-        if languages_spoken:
-            meta_items.append(languages_spoken)
-        if status:
-            meta_items.append(status)
-            
-        await container.mount(Static(" * ".join(filter(None, meta_items)), classes="media-metadata"))
-
-        # 4. Genres & Description
-        if genres:
-            await container.mount(Static(f"Genres: {genres}", classes="media-genres"))
-        if description:
-            await container.mount(Static(description, classes="media-overview"))
-            
-        # Render poster placeholder
-        if self.chafa_available and tmdb_data.get("poster_path"):
-            await container.mount(Static(id="poster-display-modal"))
-            self.last_chafa_width = None
-            # Trigger initial re-measure
-            self.set_timer(0.1, lambda: self.post_message(RefreshPoster()))
-
-    async def on_resize(self, event) -> None:
-        if self.chafa_available and self.tmdb_data.get("poster_path"):
-            if self.post_message_debounce_timer:
-                self.post_message_debounce_timer.stop()
-            self.post_message_debounce_timer = self.set_timer(0.2, lambda: self.post_message(RefreshPoster()))
-
-    async def on_refresh_poster(self, message: RefreshPoster) -> None:
-        try:
-            poster_widget = self.query_one("#poster-display-modal", Static)
-            container = self.query_one("#modal-media-container")
-        except NoMatches:
-            return
-
-        # Measure container width
-        target_width = max(10, container.size.width - 8)
-        
-        # Honor max width setting
-        chafa_max_width = self.settings.get("chafa_max_width", 50)
-        if chafa_max_width > 0:
-            target_width = min(target_width, chafa_max_width)
-
-        if self.last_chafa_width is None or abs(target_width - self.last_chafa_width) > 2:
-            poster_url = f"https://image.tmdb.org/t/p/w1280{self.tmdb_data['poster_path']}"
-            poster_art, error = await self.api.get_poster_chafa(poster_url, width=target_width)
-            if not error:
-                poster_widget.update(Text.from_ansi(poster_art))
-                self.last_chafa_width = target_width
-
-    @on(Button.Pressed, "#btn-print-json-modal")
-    async def handle_print_json(self):
-        tmdb_id = self.tmdb_data.get("id")
-        tvdb_id = self.tmdb_data.get("external_ids", {}).get("tvdb_id")
-        
-        media_type = "tv" if self.media_type == "tv" else "movie"
-        external_id = str(tvdb_id) if media_type == "tv" and tvdb_id else str(tmdb_id)
-
-        await self.app.start_spinner("Fetching extended Riven data...")
-        extended_data = await self.api.get_item_by_id(media_type, external_id, self.settings.get("riven_key"), extended=True)
-        self.app.stop_spinner()
-        
-        data = extended_data or self.riven_data or {"info": "Item not in Riven library"}
-
-        media_container = self.query_one("#modal-media-container")
-        json_container = self.query_one("#modal-json-container")
-        back_btn = self.query_one("#btn-back-from-json")
-
-        await json_container.query("*").remove()
-        formatted_json = json.dumps(data, indent=4)
-        await json_container.mount(Static(formatted_json))
-
-        media_container.add_class("hidden")
-        json_container.remove_class("hidden")
-        back_btn.remove_class("hidden")
-
-    @on(Button.Pressed, "#btn-back-from-json")
-    def handle_back_from_json(self):
-        self.query_one("#modal-media-container").remove_class("hidden")
-        self.query_one("#modal-json-container").add_class("hidden")
-        self.query_one("#btn-back-from-json").add_class("hidden")
-
-    @on(Button.Pressed, "#btn-back-to-dashboard")
-    def exit_modal(self):
-        self.dismiss()
-
-    @on(Button.Pressed, "#btn-add-modal")
-    async def handle_add(self):
-        title = self.tmdb_data.get("name") or self.tmdb_data.get("title")
-        id_to_add = self.tmdb_data.get("external_ids", {}).get("tvdb_id") if self.media_type == "tv" else self.tmdb_data.get("id")
-        id_type = "tvdb_ids" if self.media_type == "tv" else "tmdb_ids"
-        riven_type = "show" if self.media_type == "tv" else "movie"
-        
-        if not id_to_add:
-            self.app.notify(f"Missing {id_type[:-1].upper()} for add.", severity="error")
-            return
-
-        self.app.notify(f"Adding '{title}' to library...")
-        success, response = await self.api.add_item(riven_type, id_type, str(id_to_add), self.settings.get("riven_key"))
-        if success:
-            self.app.notify(f"'{title}' added successfully!", severity="success")
-            self.dismiss()
-            self.app.run_worker(self.app.refresh_dashboard())
-        else:
-            self.app.notify(f"Failed to add: {response}", severity="error")
-
-    @on(Button.Pressed, "#btn-delete-modal")
-    async def handle_delete(self):
-        item_id = self.riven_data.get("id")
-        success, _ = await self.api.delete_item(item_id, self.settings.get("riven_key"))
-        if success:
-            self.app.notify("Item deleted", severity="success")
-            self.dismiss()
-            self.app.run_worker(self.app.refresh_dashboard())
-        else:
-            self.app.notify("Failed to delete item.", severity="error")
-
-    @on(Button.Pressed, "#btn-reset-modal")
-    async def handle_reset(self):
-        item_id = self.riven_data.get("id")
-        success, _ = await self.api.reset_item(item_id, self.settings.get("riven_key"))
-        if success:
-            self.app.notify("Item reset successfully.", severity="information")
-            self.dismiss()
-        else:
-            self.app.notify("Failed to reset item.", severity="error")
-
-    @on(Button.Pressed, "#btn-retry-modal")
-    async def handle_retry(self):
-        item_id = self.riven_data.get("id")
-        success, _ = await self.api.retry_item(item_id, self.settings.get("riven_key"))
-        if success:
-            self.app.notify("Item sent for retry.", severity="information")
-            self.dismiss()
-        else:
-            self.app.notify("Failed to retry item.", severity="error")
-
-    @on(Button.Pressed, "#btn-scrape-modal")
-    def handle_scrape(self):
-        self.dismiss()
-        main_content = self.app.query_one(MainContent)
-        main_content.item_data = {"id": self.tmdb_data.get("id"), "media_type": self.media_type}
-        main_content.tmdb_details = self.tmdb_data
-        main_content.item_details = self.riven_data
-        self.app.run_worker(self.app._run_manual_scrape)
-
-class ScrapeLogScreen(ModalScreen[dict]):
-    def __init__(self, media_type: str, tmdb_id: int, riven_key: str, riven_item_id: str = None, tvdb_id: int = None, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
-        super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
-        self.media_type = media_type
-        self.tmdb_id = tmdb_id
-        self.riven_key = riven_key
-        self.riven_item_id = riven_item_id
-        self.tvdb_id = tvdb_id
-        self.all_streams = {}
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="scrape-log-container", classes="modal-popup"):
-            yield Static("Discovering streams...", id="scrape-log-title")
-            yield Log(id="scrape-log", highlight=True)
-            yield Button("Close", id="btn-close-scrape-log", variant="error")
-
-    async def on_mount(self) -> None:
-        self.run_worker(self.run_discovery())
-
-    async def run_discovery(self):
-        log_widget = self.query_one(Log)
-        log_widget.write_line("Starting stream discovery...")
-        try:
-            async for line in self.app.api.scrape_stream(
-                self.media_type, self.tmdb_id, self.riven_key, self.riven_item_id, tvdb_id=self.tvdb_id
-            ):
-                if line.startswith("data:"):
-                    data_content = line[len("data:"):].strip()
-                    if data_content == "[DONE]":
-                        break
-                    try:
-                        message_data = json.loads(data_content)
-                        if 'message' in message_data:
-                            log_widget.write_line(f"-> {message_data['message']}")
-                        if 'streams' in message_data and message_data['streams']:
-                            self.all_streams.update(message_data['streams'])
-                    except json.JSONDecodeError:
-                        continue
-                elif line.startswith("error:"):
-                    log_widget.write_line(f"ERROR: {line}")
-            
-            log_widget.write_line("Discovery complete.")
-            await asyncio.sleep(1)
-            self.dismiss(self.all_streams)
-        except Exception as e:
-            log_widget.write_line(f"Unexpected error: {e}")
-
-    @on(Button.Pressed, "#btn-close-scrape-log")
-    def on_close_button(self, event: Button.Pressed):
-        self.dismiss(self.all_streams)
-
-class StreamSelectionScreen(ModalScreen[str]):
-    def __init__(self, streams: List[dict], name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
-        super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
-        self.streams = streams
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="stream-selection-container", classes="modal-popup"):
-            yield Static("Select a Stream to Scrape", id="stream-selection-title")
-            yield ListView(id="stream-list")
-            yield Button("Cancel", id="btn-cancel-stream-selection", variant="error")
-
-    def on_mount(self) -> None:
-        lv = self.query_one(ListView)
-        for stream in self.streams:
-            raw_title = escape(stream.get('raw_title', 'Unknown Stream'))
-            resolution = stream.get('resolution', 'N/A')
-            rank = stream.get('rank', 'N/A')
-            
-            label_text = f"{raw_title} (Res: {resolution}, Rank: {rank})"
-
-            if stream.get('failed'):
-                label_text = f"[s]{label_text}[/s]"
-            
-            label = Label(Text.from_markup(label_text))
-            list_item = ListItem(label)
-            list_item.stream_data = stream
-
-            if stream.get('failed'):
-                list_item.disabled = True
-            
-            lv.append(list_item)
-
-
-    @on(ListView.Selected)
-    def on_stream_selected(self, event: ListView.Selected):
-        infohash = event.item.stream_data.get("infohash")
-        if infohash:
-            magnet_link = f"magnet:?xt=urn:btih:{infohash}"
-            self.dismiss(magnet_link)
-        else:
-            self.app.notify("No infohash found for the selected stream.", severity="error")
-            self.dismiss(None)
-
-    @on(Button.Pressed, "#btn-cancel-stream-selection")
-    def on_cancel_button(self, event: Button.Pressed):
-        self.dismiss(None)
-
-class FileMappingScreen(ModalScreen[dict]):
-
-    def __init__(self, files: List[dict], parsed_data: List[dict], title: str, session_id: str, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
-        super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
-        self.files = files
-        self.parsed_map = {p['raw_title']: p for p in parsed_data if 'raw_title' in p}
-        self.title = title
-        self.session_id = session_id
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="file-mapping-container", classes="modal-container modal-popup"):
-            yield Static(f"Map Files for: [bold]{self.title}[/bold]", id="file-mapping-title")
-            
-            with Vertical(id="file-mapping-list", classes="scrollable-container"):
-                for i, file_info in enumerate(self.files):
-                    with Horizontal(classes="file-mapping-item"):
-                        yield Label(file_info.get("filename", "Unknown file"), classes="filename-label")
-                        yield Input(
-                            placeholder="S", 
-                            id=f"season-input-{i}", 
-                            classes="season-episode-input"
-                        )
-                        yield Input(
-                            placeholder="E", 
-                            id=f"episode-input-{i}", 
-                            classes="season-episode-input"
-                        )
-            
-            with Horizontal(id="file-mapping-buttons", classes="button-bar"):
-                yield Button("Confirm", id="btn-confirm-mapping", variant="success")
-                yield Button("Cancel", id="btn-cancel-mapping", variant="primary")
-                yield Button("Abort Session", id="btn-abort-session", variant="error")
-
-    def on_mount(self) -> None:
-        for i, item_container in enumerate(self.query(".file-mapping-item")):
-            item_container.file_data = self.files[i]
-            
-            file_info = self.files[i]
-            filename = file_info.get("filename", "Unknown file")
-            parsed = self.parsed_map.get(filename, {})
-
-            season = ""
-            if "seasons" in parsed and parsed["seasons"]:
-                season = str(parsed["seasons"][0])
-            
-            episode = ""
-            if "episodes" in parsed and parsed["episodes"]:
-                episode = str(parsed["episodes"][0])
-
-            season_input = item_container.query_one(f"#season-input-{i}", Input)
-            episode_input = item_container.query_one(f"#episode-input-{i}", Input)
-
-            season_input.value = season
-            episode_input.value = episode
-
-    @on(Button.Pressed, "#btn-confirm-mapping")
-    def on_confirm_mapping(self, event: Button.Pressed) -> None: 
-        mapping = {}
-        has_error = False
-        for i, item_container in enumerate(self.query(".file-mapping-item")):
-            season_input = self.query_one(f"#season-input-{i}", Input)
-            episode_input = self.query_one(f"#episode-input-{i}", Input)
-            
-            season_str = season_input.value.strip()
-            episode_str = episode_input.value.strip()
-
-            if not season_str and not episode_str:
-                continue
-
-            try:
-                season = int(season_str)
-                episode = int(episode_str)
-                season_input.remove_class("input-error")
-                episode_input.remove_class("input-error")
-            except ValueError:
-                self.notify("Invalid season or episode number. Please enter valid integers.", severity="error")
-                if not season_str.isdigit():
-                    season_input.add_class("input-error")
-                if not episode_str.isdigit():
-                    episode_input.add_class("input-error")
-                has_error = True
-                continue
-
-            if str(season) not in mapping:
-                mapping[str(season)] = {}
-            
-            file_data = item_container.file_data
-            mapping[str(season)][str(episode)] = {
-                "file_id": file_data.get("file_id"),
-                "filename": file_data.get("filename"),
-                "filesize": file_data.get("filesize"),
-                "download_url": file_data.get("download_url")
-            }
-        
-        if not has_error:
-            if not mapping:
-                self.notify("No files were mapped. Please map at least one file.", severity="warning")
-            else:
-                self.dismiss(mapping)
-
-    @on(Button.Pressed, "#btn-cancel-mapping")
-    def on_cancel_mapping(self, event: Button.Pressed) -> None: 
-        self.dismiss(None)
-
-    @on(Button.Pressed, "#btn-abort-session")
-    async def on_abort_session(self, event: Button.Pressed) -> None: 
-        if self.session_id:
-            success, response = await self.app.api.abort_scrape_session(self.session_id, self.app.settings.get("riven_key"))
-            if success:
-                self.app.notify("Scrape session aborted.", severity="info")
-                self.dismiss(None)
-            else:
-                self.app.notify(f"Error aborting session: {response}", severity="error")
-        else:
-            self.app.notify("No session to abort.", severity="warning")
-            self.dismiss(None)
-
-
-class ChafaCheckScreen(ModalScreen[bool]):
-    def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
-        super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="chafa-check-container", classes="modal-popup"):
-            yield Static("⚠️ Chafa Not Found", id="chafa-check-title")
-            yield Static(
-                "The [bold]chafa[/bold] command is required to display posters.\n" 
-                "Without it, the image feature will be disabled.\n\n" 
-                "To install it on Ubuntu/Debian, run:\n" 
-                "[bold cyan]sudo apt update && sudo apt install chafa[/bold cyan]\n\n" 
-                "Do you want to continue without images?",
-                id="chafa-check-message"
-            )
-            with Horizontal(id="chafa-check-buttons"):
-                yield Button("Continue", id="btn-chafa-continue", variant="primary")
-                yield Button("Exit", id="btn-chafa-exit", variant="error")
-
-    @on(Button.Pressed, "#btn-chafa-continue")
-    def on_continue(self) -> None:
-        self.dismiss(True)
-
-    @on(Button.Pressed, "#btn-chafa-exit")
-    def on_exit(self) -> None:
-        self.dismiss(False)
-
 
 class TitleSpinner:
     SPINNER_FRAMES = ['⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷']
@@ -599,101 +73,6 @@ class TitleSpinner:
         self._frame_index = (self._frame_index + 1) % len(self.SPINNER_FRAMES)
         self.title_widget.update(f"{self.base_title} - {self.message} {self.SPINNER_FRAMES[self._frame_index]}")
 
-
-class CalendarItemSelected(Message):
-    def __init__(self, item_data: dict) -> None:
-        super().__init__()
-        self.item_data = item_data
-
-class PageChanged(Message):
-    def __init__(self, page: int) -> None:
-        self.page = page
-        super().__init__()
-
-class PaginationControl(Horizontal):
-    def __init__(self, page: int, total_pages: int) -> None:
-        super().__init__(id="pagination-container")
-        self.page = page
-        self.total_pages = total_pages
-
-    def compose(self) -> ComposeResult:
-        yield Button("<", id="btn-prev-page", disabled=self.page <= 1)
-        yield Label(f"Page {self.page} of {self.total_pages}", classes="pagination-label")
-        yield Button(">", id="btn-next-page", disabled=self.page >= self.total_pages)
-
-class MonthChanged(Message):
-    def __init__(self, year: int, month: int) -> None:
-        self.year = year
-        self.month = month
-        super().__init__()
-
-class FilterPill(Static):
-    class Changed(Message):
-        def __init__(self, filter_type: str, value: bool) -> None:
-            self.filter_type = filter_type
-            self.value = value
-            super().__init__()
-
-    def __init__(self, label: str, value: bool, filter_type: str):
-        super().__init__(label, id=filter_type, classes="filter-pill")
-        self.filter_type = filter_type
-        self.value = value
-        self.add_class(f"pill-{filter_type}")
-        if value:
-            self.add_class("-on")
-
-    def on_click(self) -> None:
-        self.value = not self.value
-        self.set_class(self.value, "-on")
-        self.post_message(self.Changed(self.filter_type, self.value))
-
-class CalendarItemCard(Horizontal):
-    def __init__(self, item_data: dict) -> None:
-        i_type = item_data.get("item_type", "unknown")
-        super().__init__(classes=f"calendar-card calendar-card-{i_type}")
-        self.item_data = item_data
-
-    def on_click(self) -> None:
-        self.post_message(CalendarItemSelected(self.item_data))
-
-    def compose(self) -> ComposeResult:
-        i_type = self.item_data.get("item_type", "unknown")
-        icon = "📺" 
-        color = "#3498DB" # Default blue
-        if i_type == "movie": 
-            icon = "🎞️"
-            color = "#E67E22"
-        elif i_type == "season":
-            color = "#2ECC71"
-        elif i_type == "show":
-            color = "#9B59B6"
-        
-        yield Label(f"[{color}]{icon}[/]", classes="calendar-card-icon")
-        with Vertical(classes="calendar-card-content"):
-            title = self.item_data.get("show_title") or self.item_data.get("title") or "Unknown"
-            yield Label(title, classes="calendar-card-title")
-            
-            season = self.item_data.get("season")
-            episode = self.item_data.get("episode")
-            meta = ""
-            if season is not None:
-                meta = f"Season {season}"
-                if episode is not None:
-                    meta += f" , Episode {episode}"
-            if meta:
-                yield Label(meta, classes="calendar-card-meta")
-
-class CalendarHeader(Horizontal):
-    def __init__(self, year: int, month: int) -> None:
-        super().__init__(id="calendar-header-container")
-        self.year = year
-        self.month = month
-
-    def compose(self) -> ComposeResult:
-        month_name = calendar.month_name[self.month]
-        yield Button("<", id="btn-prev-month")
-        yield Label(f"{month_name} {self.year}", id="calendar-month-label")
-        yield Button(">", id="btn-next-month")
 
 class MainContent(Vertical):
     
@@ -751,154 +130,6 @@ class MainContent(Vertical):
         self.query_one("#main-content-json-container").add_class("hidden")
         self.query_one("#btn-back-to-actions").add_class("hidden")
         self.query_one("#main-content-title").display = False
-
-class LogsView(Vertical):
-    filter_query = reactive("")
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.displayed_logs = []
-        self._refresh_timer = None
-
-    def compose(self) -> ComposeResult:
-        yield RichLog(id="logs-display", wrap=True, highlight=True, markup=True)
-        with Horizontal(id="logs-controls"):
-            yield Input(placeholder="Filter logs (use ! to exclude)...", id="logs-filter-input")
-            yield Button("Refresh", id="btn-logs-refresh", variant="primary")
-            yield Checkbox("Auto Refresh", id="cb-logs-auto-refresh", value=False)
-            yield Button("Clear", id="btn-logs-clear", variant="error")
-
-    def _matches_filter(self, line: str) -> bool:
-        if not self.filter_query:
-            return True
-        
-        query = self.filter_query
-        # Smart Case: case-sensitive if query has uppercase
-        is_case_sensitive = any(c.isupper() for c in query)
-        
-        terms = query.split()
-        for term in terms:
-            negate = term.startswith("!")
-            search_term = term[1:] if negate else term
-            
-            if not search_term:
-                continue
-
-            if is_case_sensitive:
-                found = search_term in line
-            else:
-                found = search_term.lower() in line.lower()
-            
-            if negate and found:
-                return False
-            if not negate and not found:
-                return False
-        
-        return True
-
-    def _style_line(self, line: str) -> str:
-        styled_line = escape(line)
-        if "|" in line:
-            parts = line.split("|", 2)
-            if len(parts) >= 2:
-                level_part = parts[1].strip()
-                color = "white"
-                if "ERROR" in level_part: color = "red"
-                elif "WARNING" in level_part: color = "yellow"
-                elif "SUCCESS" in level_part: color = "green"
-                elif "DEBUG" in level_part: color = "cyan"
-                elif "PROGRAM" in level_part: color = "magenta"
-                
-                p0 = escape(parts[0])
-                p1 = escape(parts[1])
-                
-                if len(parts) == 3:
-                    p2 = escape(parts[2])
-                    styled_line = f"{p0} | [bold {color}]{p1}[/] |{p2}"
-                else:
-                    styled_line = f"{p0} | [bold {color}]{p1}[/]"
-        return styled_line
-
-    def watch_filter_query(self, new_query: str) -> None:
-        log_widget = self.query_one("#logs-display", RichLog)
-        log_widget.clear()
-        for line in self.displayed_logs:
-            if "GET /api/v1/logs" in line:
-                continue
-            if self._matches_filter(line):
-                log_widget.write(self._style_line(line))
-
-    @on(Input.Changed, "#logs-filter-input")
-    def on_filter_changed(self, event: Input.Changed) -> None:
-        self.filter_query = event.value.strip()
-
-    async def update_logs(self, refresh_all: bool = False):
-        riven_key = self.app.settings.get("riven_key")
-        logs, error = await self.app.api.get_direct_logs(riven_key)
-        
-        if error:
-            self.app.notify(f"Error fetching logs: {error}", severity="error")
-            return
-
-        log_widget = self.query_one("#logs-display", RichLog)
-        
-        if refresh_all:
-            log_widget.clear()
-            self.displayed_logs = []
-            # Apply display limit on initial load
-            limit = self.app.settings.get("log_display_limit", 50)
-            if len(logs) > limit:
-                logs = logs[-limit:]
-
-        # Find new logs
-        new_lines = []
-        if not self.displayed_logs:
-            new_lines = logs
-        else:
-            last_line = self.displayed_logs[-1]
-            try:
-                idx = -1
-                for i in range(len(logs) - 1, -1, -1):
-                    if logs[i] == last_line:
-                        idx = i
-                        break
-                
-                if idx != -1:
-                    new_lines = logs[idx+1:]
-                else:
-                    new_lines = logs
-            except Exception:
-                new_lines = logs
-
-        for line in new_lines:
-            if "GET /api/v1/logs" in line:
-                continue
-            
-            self.displayed_logs.append(line)
-            if self._matches_filter(line):
-                log_widget.write(self._style_line(line))
-
-    @on(Button.Pressed, "#btn-logs-refresh")
-    async def handle_refresh(self):
-        await self.update_logs()
-
-    @on(Button.Pressed, "#btn-logs-clear")
-    def handle_clear(self):
-        self.query_one("#logs-display", RichLog).clear()
-        self.displayed_logs = []
-
-    @on(Checkbox.Changed, "#cb-logs-auto-refresh")
-    def handle_auto_refresh(self, event: Checkbox.Changed):
-        refresh_btn = self.query_one("#btn-logs-refresh", Button)
-        if event.value:
-            refresh_btn.disabled = True
-            interval = self.app.settings.get("log_refresh_interval", 5.0)
-            self._refresh_timer = self.set_interval(interval, self.update_logs)
-        else:
-            refresh_btn.disabled = False
-            if self._refresh_timer:
-                self._refresh_timer.stop()
-                self._refresh_timer = None
 
 from search_grid import SearchGridTile, HOVER_DELAY
 
@@ -1038,8 +269,9 @@ class RivenTUI(App):
     def on_log_message(self, message: LogMessage) -> None:
         try:
             log_widget = self.query_one("#debug-log", RichLog)
-            log_widget.write(message.message)
-        except NoMatches:
+            if "-visible" in log_widget.classes:
+                log_widget.write(message.message)
+        except (NoMatches, AttributeError):
             pass
 
     def compose(self) -> ComposeResult:
@@ -1465,6 +697,9 @@ class RivenTUI(App):
         if chafa_max_width > 0:
             target_width = min(target_width, chafa_max_width)
 
+        # Height for 2:3 aspect ratio
+        target_height = int(target_width * 0.75)
+
         # Only refresh if the difference is significant
         if (
             main_content.last_chafa_width is None
@@ -1473,7 +708,7 @@ class RivenTUI(App):
             tmdb_data = main_content.tmdb_details
             if tmdb_data and tmdb_data.get("poster_path"):
                 poster_url = f"https://image.tmdb.org/t/p/w1280{tmdb_data['poster_path']}"
-                poster_art, error = await self.api.get_poster_chafa(poster_url, width=target_width)
+                poster_art, error = await self.api.get_poster_chafa(poster_url, width=target_width, height=target_height)
                 if not error:
                     poster_widget.update(Text.from_ansi(poster_art))
                     main_content.last_chafa_width = target_width
@@ -1516,9 +751,28 @@ class RivenTUI(App):
 
         # Fetch full details in parallel for taglines and genres
         async def fetch_item_details(item):
-            details, _ = await self.api.get_tmdb_details(item['media_type'], item['id'], self.settings.get("tmdb_bearer_token"))
+            tmdb_token = self.settings.get("tmdb_bearer_token")
+            riven_key = self.settings.get("riven_key")
+            
+            # 1. Fetch TMDB Details
+            details, _ = await self.api.get_tmdb_details(item['media_type'], item['id'], tmdb_token)
             if details:
                 item.update(details)
+            
+            # 2. Check Library State
+            # Map 'tv' to 'tv' or 'movie' to 'movie' for Riven
+            riven_media_type = "movie" if item['media_type'] == "movie" else "tv"
+            
+            # For TV, try to get TVDB ID if missing
+            lookup_id = item['id']
+            if riven_media_type == "tv":
+                lookup_id = item.get("external_ids", {}).get("tvdb_id") or item['id']
+
+            lib_item = await self.api.get_item_by_id(riven_media_type, str(lookup_id), riven_key)
+            if lib_item:
+                item["state"] = lib_item.get("state", "Unknown")
+                item["riven_id"] = lib_item.get("id")
+            
             return item
 
         detailed_results = await asyncio.gather(*(fetch_item_details(r) for r in results))
@@ -1597,11 +851,14 @@ class RivenTUI(App):
 
         # Set Header
         if riven_data:
+            state = riven_data.get('state', 'Unknown').title()
             title_widget.display = True
-            title_widget.update(f"In Library (Riven ID: {riven_data.get('id')})")
+            title_widget.update(f"In Library | [bold]{state}[/] (Riven ID: {riven_data.get('id')})")
+            title_widget.add_class(f"state-{riven_data.get('state', 'unknown').lower()}")
         else:
             title_widget.display = True
             title_widget.update("Not in Library")
+            title_widget.remove_class("-library-active") # Clear any old state classes
 
         # Create Split Layout
         split_layout = Horizontal(classes="media-detail-layout")
@@ -1626,9 +883,11 @@ class RivenTUI(App):
             metadata_items.append(languages_spoken)
         if status:
             metadata_items.append(status)
+        if riven_data:
+            metadata_items.append(f"[bold]{riven_data.get('state', 'Unknown').title()}[/]")
             
         if metadata_items:
-            await info_col.mount(Static(" * ".join(filter(None, metadata_items)), classes="media-metadata"))
+            await info_col.mount(Static(" • ".join(filter(None, metadata_items)), classes="media-metadata"))
         
         if genres:
             await info_col.mount(Static(f"Genres: {genres}", classes="media-genres"))
@@ -1727,7 +986,18 @@ class RivenTUI(App):
             
         self.stop_spinner()
         
-        self.push_screen(MediaCardScreen(tmdb_details, riven_details, media_type, self.api, self.settings, self.chafa_available))
+        self.push_screen(
+            MediaCardScreen(tmdb_details, riven_details, media_type, self.api, self.settings, self.chafa_available),
+            callback=self.handle_modal_result
+        )
+
+    async def handle_modal_result(self, result: any) -> None:
+        if isinstance(result, dict) and result.get("action") == "trigger_manual_scrape":
+            main_content = self.query_one(MainContent)
+            main_content.item_data = result.get("item_data")
+            main_content.tmdb_details = result.get("tmdb_details")
+            main_content.item_details = result.get("item_details")
+            self.run_worker(self._run_manual_scrape())
 
     @on(DashboardView.DashboardItem.Clicked)
     async def on_dashboard_item_clicked(self, message: DashboardView.DashboardItem.Clicked) -> None:
@@ -1739,28 +1009,10 @@ class RivenTUI(App):
         media_type = None
         
         if source == "library":
-            tmdb_id = item.get("tmdb_id")
-            if not tmdb_id and "parent_ids" in item:
-                tmdb_id = item["parent_ids"].get("tmdb_id")
-            
+            tmdb_id = await self.api.resolve_tmdb_id(item, self.settings.get("tmdb_bearer_token"))
             media_type = item.get("type", "movie")
             if media_type == "show":
                 media_type = "tv"
-            
-            # Resolve if still missing
-            if not tmdb_id:
-                external_id = item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id")
-                source_type = "tvdb_id"
-                if not external_id:
-                    external_id = item.get("imdb_id") or (item.get("parent_ids") or {}).get("imdb_id")
-                    source_type = "imdb_id"
-                
-                if external_id:
-                    await self.start_spinner(f"Resolving details for '{item.get('title')}'...")
-                    resolved_id, err = await self.api.find_tmdb_id(str(external_id), source_type, self.settings.get("tmdb_bearer_token"))
-                    self.stop_spinner()
-                    if resolved_id:
-                        tmdb_id = resolved_id
         else: # trending
             tmdb_id = item.get("id")
             media_type = item.get("media_type", "movie")
@@ -1797,8 +1049,8 @@ class RivenTUI(App):
                 self.notify(f"Failed to fetch TV details: {err}", severity="error")
                 return
 
-        # Map 'tv' to 'show' for Riven add endpoint
-        riven_media_type = "movie" if media_type == "movie" else "show"
+        # Map 'tv' to 'tv' for Riven add endpoint
+        riven_media_type = "movie" if media_type == "movie" else "tv"
         
         success, response = await self.api.add_item(riven_media_type, id_type, target_id, riven_key)
         if success:
@@ -1815,23 +1067,16 @@ class RivenTUI(App):
         ratings_map = {}
         
         async def fetch_item_rating(item):
-            # 1. Identify existing IDs
-            tmdb_id = item.get("tmdb_id") or (item.get("parent_ids") or {}).get("tmdb_id")
-            tvdb_id = item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id")
-            media_type = item.get("type", "movie")
-            
             # Key to use for dashboard mapping
-            item_key = str(tmdb_id or tvdb_id or "")
+            tmdb_id_raw = item.get("tmdb_id") or (item.get("parent_ids") or {}).get("tmdb_id")
+            tvdb_id_raw = item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id")
+            item_key = str(tmdb_id_raw or tvdb_id_raw or "")
+            
             if not item_key:
                 return None, 0
 
-            resolved_tmdb_id = tmdb_id
-
-            # 2. If TMDB ID is missing (common for shows), use MDBList to resolve it via TVDB ID
-            if not resolved_tmdb_id and tvdb_id and media_type == "show":
-                details, err = await self.api.get_mdblist_item_by_external_id("tvdb", str(tvdb_id))
-                if details and "ids" in details:
-                    resolved_tmdb_id = details["ids"].get("tmdb")
+            media_type = item.get("type", "movie")
+            resolved_tmdb_id = await self.api.resolve_tmdb_id(item, tmdb_token)
 
             # 3. Once we have a TMDB ID, fetch the official rating from TMDB
             if resolved_tmdb_id:
@@ -1989,43 +1234,41 @@ class RivenTUI(App):
             await self.start_spinner("Enriching library data...")
             # Parallel fetch TMDB details for all items to get ratings/genres/taglines
             async def enrich_item(item):
-                # 1. Identify IDs
-                # Riven internal list ID
-                item["riven_id"] = str(item.get("id"))
-                
-                m_type = item.get("type", "movie")
-                tmdb_m_type = "movie" if m_type == "movie" else "tv"
-                
-                #lookup_id is what Riven detail API expects (TMDB for movie, TVDB for show)
-                lookup_id = item.get("tmdb_id") if m_type == "movie" else (item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id"))
-                
-                if not lookup_id and m_type == "show":
-                    lookup_id = item.get("id") # In Riven items list, 'id' for shows IS the TVDB ID
-                
-                item["lookup_id"] = str(lookup_id) if lookup_id else None
-                
-                # 2. Identify TMDB ID for metadata enrichment
-                tmdb_id = item.get("tmdb_id")
-                if not tmdb_id and "parent_ids" in item:
-                    tmdb_id = item["parent_ids"].get("tmdb_id")
-                
-                if not tmdb_id and tmdb_m_type == "tv" and lookup_id:
-                    mdb_details, _ = await self.api.get_mdblist_item_by_external_id("tvdb", str(lookup_id))
-                    if mdb_details and "ids" in mdb_details:
-                        tmdb_id = mdb_details["ids"].get("tmdb")
+                try:
+                    # 1. Identify IDs
+                    # Riven internal list ID
+                    item["riven_id"] = str(item.get("id"))
+                    
+                    m_type = item.get("type", "movie")
+                    tmdb_m_type = "movie" if m_type == "movie" else "tv"
+                    
+                    # lookup_id is what Riven detail API expects (TMDB for movie, TVDB for show)
+                    lookup_id = item.get("tmdb_id") if m_type == "movie" else (item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id"))
+                    if not lookup_id and m_type == "show":
+                        lookup_id = item.get("id")
+                    
+                    item["lookup_id"] = str(lookup_id) if lookup_id else None
+                    
+                    # 2. Identify TMDB ID for metadata enrichment
+                    tmdb_token = self.settings.get("tmdb_bearer_token")
+                    tmdb_id = await self.api.resolve_tmdb_id(item, tmdb_token)
 
-                # 3. Enrich
-                if tmdb_id:
-                    details, _ = await self.api.get_tmdb_details(tmdb_m_type, tmdb_id, self.settings.get("tmdb_bearer_token"))
-                    if details:
-                        details.pop("id", None) 
-                        item.update(details)
-                        item["tmdb_id"] = tmdb_id
+                    # 3. Enrich
+                    if tmdb_id:
+                        details, _ = await self.api.get_tmdb_details(tmdb_m_type, tmdb_id, tmdb_token)
+                        if details:
+                            details.pop("id", None) 
+                            item.update(details)
+                            item["tmdb_id"] = tmdb_id
+                except Exception as e:
+                    self.tui_logger.error(f"Failed to enrich library item: {e}")
                 
                 return item
 
-            enriched_items = await asyncio.gather(*(enrich_item(i) for i in items))
-            items = enriched_items
+            results = await asyncio.gather(*(enrich_item(i) for i in items), return_exceptions=True)
+            # Filter out any actual Exception objects that might have bubbled up
+            items = [r for r in results if isinstance(r, dict)]
+            self.stop_spinner()
 
         if not items:
             container.remove_class("hidden")
@@ -2048,26 +1291,7 @@ class RivenTUI(App):
         item_data = event.item.item_data
         media_type = item_data.get("type")
         
-        # 1. Get TMDB ID (Priority to the one we set during enrichment)
-        tmdb_id = item_data.get("tmdb_id")
-        
-        # 2. Fallback if missing
-        if not tmdb_id:
-            if media_type == "movie":
-                tmdb_id = item_data.get("id")
-            elif "parent_ids" in item_data:
-                tmdb_id = item_data["parent_ids"].get("tmdb_id")
-                
-        # 3. Last resort resolution
-        if not tmdb_id:
-            external_id = item_data.get("tvdb_id") or (item_data.get("parent_ids") or {}).get("tvdb_id") or item_data.get("id")
-            source = "tvdb_id" if media_type == "show" else "tmdb_id"
-            
-            if external_id:
-                self.notify(f"Resolving details for '{item_data.get('title')}'...", severity="information")
-                resolved_id, err = await self.api.find_tmdb_id(str(external_id), source, self.settings.get("tmdb_bearer_token"))
-                if resolved_id:
-                    tmdb_id = resolved_id
+        tmdb_id = await self.api.resolve_tmdb_id(item_data, self.settings.get("tmdb_bearer_token"))
         
         if not tmdb_id:
             self.notify(f"No TMDB ID found for '{item_data.get('title')}'. Cannot fetch details.", severity="warning")
@@ -2160,6 +1384,9 @@ class RivenTUI(App):
                 self.notify(f"Error fetching calendar: {err}", severity="error")
                 self.stop_spinner()
                 return
+            
+            self.tui_logger.debug(f"Calendar raw response: {resp}")
+            
             if isinstance(resp, dict) and "data" in resp:
                 self.calendar_cache = list(resp["data"].values())
             else:
@@ -2406,67 +1633,94 @@ class RivenTUI(App):
         if not session_id or not containers_files:
             self.notify("No cached files found in session.", severity="error")
             return
+
         if media_type == "movie":
-            video_file = max(containers_files, key=lambda f: f.get('filesize', 0))
-            file_id_str = str(video_file.get("file_id"))
-            await self.api.parse_torrent_titles([video_file.get('filename')], self.settings.get("riven_key"))
-            payload_for_select = {
-                file_id_str: {
-                    "file_id": video_file.get("file_id"),
-                    "filename": video_file.get("filename"),
-                    "filesize": video_file.get("filesize"),
-                    "download_url": video_file.get("download_url")
-                }
-            }
-            success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("riven_key") )
-            if success:
-                await self.start_spinner("Updating scrape attributes...")
-                update_payload = payload_for_select[file_id_str]
-                await self.api.update_scrape_attributes(session_id, update_payload, self.settings.get("riven_key") )
-                self.stop_spinner()
-                await self.start_spinner("Completing scrape session...")
-                final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("riven_key") )
-                self.stop_spinner()
-                if final_success:
-                    self.notify("Manual scrape initiated successfully!", severity="success")
-                    await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
-                else:
-                    self.notify(f"Finalization Error: {final_response}", severity="error")
-            else:
-                self.notify(f"Error selecting file: {response}", severity="error")
+            await self._finalize_movie_scrape(session_id, containers_files)
         elif media_type == "tv":
-            filenames = [f.get("filename") for f in containers_files if f.get("filename")]
-            response, error = await self.api.parse_torrent_titles(filenames, self.settings.get("riven_key"))
-            if error:
-                self.notify(f"Error parsing titles: {error}", severity="error")
-                return
-            parsed_files = response.get("data", [])
-            title = main_content.tmdb_details.get('name', 'N/A')
-            mapping_screen = FileMappingScreen(containers_files, parsed_files, title, session_id)
-            file_mapping = await self.app.push_screen_wait(mapping_screen)
-            if not file_mapping:
-                return
-            payload_for_select = {}
-            for season in file_mapping:
-                for episode in file_mapping[season]:
-                    file_data = file_mapping[season][episode]
-                    file_id_str = str(file_data.get("file_id"))
-                    payload_for_select[file_id_str] = file_data
-            success, response = await self.api.select_scrape_file(session_id, payload_for_select, self.settings.get("riven_key") )
-            if success:
-                await self.start_spinner("Updating scrape attributes...")
-                await self.api.update_scrape_attributes(session_id, file_mapping, self.settings.get("riven_key") )
-                self.stop_spinner()
-                await self.start_spinner("Completing scrape session...")
-                final_success, final_response = await self.api.complete_scrape_session(session_id, self.settings.get("riven_key") )
-                self.stop_spinner()
-                if final_success:
-                    self.notify("Manual scrape for TV show initiated successfully!", severity="success")
-                    await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
-                else:
-                    self.notify(f"Finalization Error: {final_response}", severity="error")
-            else:
-                self.notify(f"Error selecting files: {response}", severity="error")
+            await self._finalize_tv_scrape(session_id, containers_files)
+
+    async def _finalize_movie_scrape(self, session_id: str, containers_files: List[dict]):
+        main_content = self.query_one(MainContent)
+        riven_key = self.settings.get("riven_key")
+        
+        # Select largest file for movie
+        video_file = max(containers_files, key=lambda f: f.get('filesize', 0))
+        file_id_str = str(video_file.get("file_id"))
+        
+        await self.api.parse_torrent_titles([video_file.get('filename')], riven_key)
+        
+        payload_for_select = {
+            file_id_str: {
+                "file_id": video_file.get("file_id"),
+                "filename": video_file.get("filename"),
+                "filesize": video_file.get("filesize"),
+                "download_url": video_file.get("download_url")
+            }
+        }
+        
+        success, response = await self.api.select_scrape_file(session_id, payload_for_select, riven_key)
+        if not success:
+            self.notify(f"Error selecting file: {response}", severity="error")
+            return
+
+        await self.start_spinner("Updating scrape attributes...")
+        await self.api.update_scrape_attributes(session_id, payload_for_select[file_id_str], riven_key)
+        self.stop_spinner()
+        
+        await self.start_spinner("Completing scrape session...")
+        final_success, final_response = await self.api.complete_scrape_session(session_id, riven_key)
+        self.stop_spinner()
+        
+        if final_success:
+            self.notify("Manual scrape initiated successfully!", severity="success")
+            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
+        else:
+            self.notify(f"Finalization Error: {final_response}", severity="error")
+
+    async def _finalize_tv_scrape(self, session_id: str, containers_files: List[dict]):
+        main_content = self.query_one(MainContent)
+        riven_key = self.settings.get("riven_key")
+        
+        filenames = [f.get("filename") for f in containers_files if f.get("filename")]
+        response, error = await self.api.parse_torrent_titles(filenames, riven_key)
+        if error:
+            self.notify(f"Error parsing titles: {error}", severity="error")
+            return
+            
+        parsed_files = response.get("data", [])
+        title = main_content.tmdb_details.get('name', 'N/A')
+        
+        mapping_screen = FileMappingScreen(containers_files, parsed_files, title, session_id)
+        file_mapping = await self.app.push_screen_wait(mapping_screen)
+        
+        if not file_mapping:
+            return
+            
+        payload_for_select = {}
+        for season in file_mapping:
+            for episode in file_mapping[season]:
+                file_data = file_mapping[season][episode]
+                file_id_str = str(file_data.get("file_id"))
+                payload_for_select[file_id_str] = file_data
+                
+        success, response = await self.api.select_scrape_file(session_id, payload_for_select, riven_key)
+        if not success:
+            self.notify(f"Error selecting files: {response}", severity="error")
+            return
+
+        await self.start_spinner("Updating scrape attributes...")
+        await self.api.update_scrape_attributes(session_id, file_mapping, riven_key)
+        self.stop_spinner()
+        
+        await self.start_spinner("Completing scrape session...")
+        final_success, final_response = await self.api.complete_scrape_session(session_id, riven_key)
+        self.stop_spinner()
+        
+        if final_success:
+            self.notify("Manual scrape for TV show initiated successfully!", severity="success")
+            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
+        else:
+            self.notify(f"Finalization Error: {final_response}", severity="error")
 
     @on(Button.Pressed, "#btn-add")
     async def handle_add(self):

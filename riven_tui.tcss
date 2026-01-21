@@ -138,8 +138,8 @@ Button {
 
 .search-tile {
     width: 100%;
-    height: 16; /* Fixed height for consistency */
-    min-height: 16;
+    height: 20; /* Increased from 16 to fit aspect ratio better */
+    min-height: 20;
     background: #141424;
     border: solid #2C3E50;
     padding: 1;
@@ -159,6 +159,7 @@ Button {
     height: 100%;
     content-align: center middle;
     background: #000;
+    margin: -1; /* Negate parent padding to fill edge-to-edge */
 }
 
 #tile-info {
@@ -168,11 +169,21 @@ Button {
 
 .tile-header {
     height: 1;
-    align: right top;
+    layout: horizontal;
+    content-align: center middle;
     margin-bottom: 1;
 }
 
+.tile-state {
+    width: 1fr;
+    text-align: left;
+    height: 1;
+    text-style: bold;
+}
+
 .tile-rating {
+    width: 1fr;
+    text-align: right;
     color: #F4D35E;
     text-style: bold;
 }
@@ -530,44 +541,6 @@ MainContent.media-details-active.-stacked #main-content-container {
     background: #0F0F1A; /* Even darker "board" for the poster */
 }
 
-.media-button-bar Button.error {
-    background: #E57373;
-}
-
-.media-button-bar Button.warning {
-    background: #F4D35E;
-}
-
-.media-button-bar Button.success {
-    background: #6A994E;
-}
-
-#btn-reset, #btn-retry, #btn-manual-scrape, #btn-print-json {
-    background: #434343;
-}
-
-.media-metadata {
-    color: #B0B0B0;
-    margin-bottom: 1;
-}
-
-.media-genres {
-    color: #B0B0B0;
-    margin-bottom: 1;
-}
-
-.media-overview {
-    margin-bottom: 1;
-}
-
-#poster-display {
-    width: 100%;
-    height: auto;
-    content-align: center middle;
-    margin: 1 0;
-    background: #1A1A2E;
-}
-
 /* Sidebar Item Styles */
 ListView, ListItem {
     background: #1A1A2E;
@@ -628,10 +601,18 @@ ListItem:focus .search-item-meta {
 
 #modal-media-card {
     width: 90%;
+    max-width: 120;
     height: 90%;
     background: #1A1A2E;
     border: round #3D5A80;
     padding: 1 2;
+}
+
+#poster-display-modal {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    margin: 1 0;
 }
 
 #modal-media-container {
@@ -1557,6 +1538,24 @@ ListItem:focus .search-item-meta {
     text-style: bold;
     color: #F0F0F0;
 }
+
+.tile-state {
+    width: auto;
+    height: 1;
+    padding: 0 1;
+    text-style: bold;
+    color: #F0F0F0;
+}
+
+.state-completed { color: #6A994E; }
+.state-partiallycompleted { color: #A7C957; }
+.state-indexed { color: #3D5A80; }
+.state-ongoing { color: #F4D35E; }
+.state-scraped { color: #BE95C4; }
+.state-downloaded { color: #BE95C4; }
+.state-failed { color: #E57373; }
+.state-paused { color: #F4D35E; }
+.state-requested { color: #777; }
 
 .state-completed .db-state-count { color: #6A994E; }
 .state-failed .db-state-count { color: #E57373; }

@@ -60,7 +60,7 @@ class LibraryItemCard(ListItem):
         genre_names = [self.app.tmdb_genres.get(gid) for gid in genre_ids if self.app.tmdb_genres.get(gid)]
         genres_text = ", ".join(genre_names) if genre_names else ""
         
-        state = self.item_data.get('state', 'Unknown')
+        state = self.item_data.get('state', 'Unknown').title()
         content_rating = self.item_data.get('content_rating') or 'N/A'
         
         meta_parts = [rating_text]

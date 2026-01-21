@@ -7,6 +7,38 @@ from typing import List, Dict
 import calendar
 from search_results import SearchResultItem
 from search import SearchArea
+from messages import PageChanged
+
+class PaginationControl(Horizontal):
+    def __init__(self, page: int, total_pages: int) -> None:
+        super().__init__(id="pagination-container")
+        self.page = page
+        self.total_pages = total_pages
+
+    def compose(self) -> ComposeResult:
+        yield Button("<", id="btn-prev-page", disabled=self.page <= 1)
+        yield Label(f"Page {self.page} of {self.total_pages}", classes="pagination-label")
+        yield Button(">", id="btn-next-page", disabled=self.page >= self.total_pages)
+
+class FilterPill(Static):
+    class Changed(Message):
+        def __init__(self, filter_type: str, value: bool) -> None:
+            self.filter_type = filter_type
+            self.value = value
+            super().__init__()
+
+    def __init__(self, label: str, value: bool, filter_type: str):
+        super().__init__(label, id=filter_type, classes="filter-pill")
+        self.filter_type = filter_type
+        self.value = value
+        self.add_class(f"pill-{filter_type}")
+        if value:
+            self.add_class("-on")
+
+    def on_click(self) -> None:
+        self.value = not self.value
+        self.set_class(self.value, "-on")
+        self.post_message(self.Changed(self.filter_type, self.value))
 
 class Sidebar(Container):
     def compose(self) -> ComposeResult:

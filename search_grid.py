@@ -30,6 +30,9 @@ class SearchGridTile(Vertical):
         rating = self.item_data.get('vote_average', 0)
         rating_str = f"⭐ {rating:.1f}" if rating > 0 else ""
         
+        state = self.item_data.get('state')
+        state_str = state.title() if state else ""
+
         media_type = self.item_data.get('media_type', 'unknown').upper()
         type_icon = "🎬" if media_type == 'MOVIE' else "📺"
 
@@ -38,8 +41,9 @@ class SearchGridTile(Vertical):
 
         # Container for Text Info (Visible by default)
         with Vertical(id="tile-info"):
-            # Top Row: Rating Badge
+            # Top Row: State and Rating
             with Horizontal(classes="tile-header"):
+                yield Label(state_str, classes=f"tile-state state-{state.lower() if state else 'none'}")
                 yield Label(rating_str, classes="tile-rating")
 
             # Middle: Title
@@ -95,17 +99,18 @@ class SearchGridTile(Vertical):
 
         poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
         
-        # Reduced width to prevent wrapping break
-        target_width = 26 
+        # Accounting for 1-cell padding in the tile (20 height -> 18 available)
+        target_width = 28
+        target_height = 18
         
-        self.run_worker(self._fetch_and_render(poster_url, target_width))
+        self.run_worker(self._fetch_and_render(poster_url, target_width, target_height))
 
-    async def _fetch_and_render(self, url: str, width: int):
+    async def _fetch_and_render(self, url: str, width: int, height: int):
         # Double check we are still hovering before rendering
         if not self._is_hovering:
             return
 
-        poster_art, error = await self.api.get_poster_chafa(url, width=width)
+        poster_art, error = await self.api.get_poster_chafa(url, width=width, height=height)
         
         # Triple check (async await might have taken time)
         if not self._is_hovering:
