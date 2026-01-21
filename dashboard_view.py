@@ -9,6 +9,11 @@ class DashboardView(Vertical):
 
     class DashboardItem(Horizontal):
         """A clickable item in the dashboard lists."""
+        can_focus = True
+        BINDINGS = [
+            ("enter", "select", "Select"),
+        ]
+
         def __init__(self, label: str, item_data: dict, source: str, show_add: bool = False):
             super().__init__(classes="db-list-item-container")
             self.label_text = label
@@ -31,6 +36,9 @@ class DashboardView(Vertical):
             def __init__(self, item_data: dict):
                 super().__init__()
                 self.item_data = item_data
+
+        def action_select(self) -> None:
+            self.post_message(self.Clicked(self.item_data, self.source))
 
         def on_click(self, event) -> None:
             # If the [+] button was clicked, we ignore it here (handled by on_button_pressed)

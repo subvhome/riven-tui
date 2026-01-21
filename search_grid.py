@@ -9,6 +9,10 @@ HOVER_DELAY = 2.0 # Seconds to hover before loading poster
 
 class SearchGridTile(Vertical):
     """A tile representing a media item in the search grid."""
+    can_focus = True
+    BINDINGS = [
+        ("enter", "select", "Select"),
+    ]
 
     class Selected(Message):
         def __init__(self, item_data: dict) -> None:
@@ -20,7 +24,7 @@ class SearchGridTile(Vertical):
         self.item_data = item_data
         self.api = api
         self._hover_timer = None
-        self._is_hovering = False # Track actual hover state
+        self._is_active = False # Track actual active state (hover or focus)
 
     def compose(self) -> ComposeResult:
         title = self.item_data.get('title') or self.item_data.get('name') or "Unknown"
@@ -55,11 +59,14 @@ class SearchGridTile(Vertical):
                 yield Label(f"{type_icon} {media_type}", classes="tile-type")
                 yield Label(year, classes="tile-year")
 
+    def action_select(self) -> None:
+        self.post_message(self.Selected(self.item_data))
+
     def on_click(self) -> None:
         self.post_message(self.Selected(self.item_data))
 
     def on_enter(self, event: events.Enter) -> None:
-        self._is_hovering = True
+        self._is_active = True
         self.add_class("-hover-loading")
         # Use constant for delay
         self._hover_timer = self.set_timer(HOVER_DELAY, self._load_poster)
@@ -74,21 +81,31 @@ class SearchGridTile(Vertical):
         except:
             pass
 
-        self._is_hovering = False
+        self._is_active = False
+        self._reset_view()
+
+    def on_focus(self, event: events.Focus) -> None:
+        self._is_active = True
+        self.add_class("-hover-loading")
+        self._hover_timer = self.set_timer(HOVER_DELAY, self._load_poster)
+
+    def on_blur(self, event: events.Blur) -> None:
+        self._is_active = False
+        self._reset_view()
+
+    def _reset_view(self) -> None:
         self.remove_class("-hover-loading")
-        
         if self._hover_timer:
             self._hover_timer.stop()
             self._hover_timer = None
         
-        # Always reset view to text only on leave
+        # Always reset view to text only
         self.query_one("#tile-poster").update("")
         self.query_one("#tile-poster").add_class("hidden")
         self.query_one("#tile-info").remove_class("hidden")
-        self._poster_loaded = False
 
     async def _load_poster(self) -> None:
-        if not self._is_hovering:
+        if not self._is_active:
             return
 
         self.remove_class("-hover-loading")
@@ -106,14 +123,14 @@ class SearchGridTile(Vertical):
         self.run_worker(self._fetch_and_render(poster_url, target_width, target_height))
 
     async def _fetch_and_render(self, url: str, width: int, height: int):
-        # Double check we are still hovering before rendering
-        if not self._is_hovering:
+        # Double check we are still active before rendering
+        if not self._is_active:
             return
 
         poster_art, error = await self.api.get_poster_chafa(url, width=width, height=height)
         
         # Triple check (async await might have taken time)
-        if not self._is_hovering:
+        if not self._is_active:
             return
 
         if error:

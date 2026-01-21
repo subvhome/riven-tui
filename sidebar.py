@@ -40,6 +40,18 @@ class FilterPill(Static):
         self.set_class(self.value, "-on")
         self.post_message(self.Changed(self.filter_type, self.value))
 
+class TypePill(Static):
+    def __init__(self, label: str, value: bool, type_id: str):
+        super().__init__(label, id=f"lib-filter-type-{type_id}", classes="type-pill")
+        self.value = value
+        self.type_id = type_id
+        if value:
+            self.add_class("-active")
+
+    def on_click(self) -> None:
+        self.value = not self.value
+        self.set_class(self.value, "-active")
+
 class Sidebar(Container):
     def compose(self) -> ComposeResult:
         yield SearchArea(id="sidebar-search")
@@ -56,12 +68,12 @@ class Sidebar(Container):
                 yield Input(placeholder="Search library...", id="lib-filter-search")
                 
                 yield Label("Type:")
-                yield Select([
-                    ("All", None), 
-                    ("Movie", "movie"), 
-                    ("TV Show", "show"),
-                    ("Anime", "anime")
-                ], prompt="Type", id="lib-filter-type", allow_blank=False, value=None)
+                with Horizontal(id="lib-type-pills"):
+                    yield TypePill("Movies", True, "movie")
+                    yield TypePill("Shows", True, "show")
+                    yield TypePill("Seasons", False, "season")
+                    yield TypePill("Episodes", False, "episode")
+                    yield TypePill("Anime", False, "anime")
                 
                 yield Label("States:")
                 yield Select([
@@ -188,9 +200,14 @@ class Sidebar(Container):
                 lv.append(SearchResultItem(item))
 
     def get_filter_values(self) -> dict:
+        selected_types = []
+        for t in ["movie", "show", "season", "episode", "anime"]:
+            if self.query_one(f"#lib-filter-type-{t}", TypePill).value:
+                selected_types.append(t)
+
         return {
             "search": self.query_one("#lib-filter-search", Input).value,
-            "type": self.query_one("#lib-filter-type", Select).value,
+            "type": selected_types if selected_types else ["movie", "show"], # Default if none selected
             "states": self.query_one("#lib-filter-states", Select).value,
             "sort": self.query_one("#lib-filter-sort", Select).value,
             "limit": self.query_one("#lib-filter-limit", Select).value,

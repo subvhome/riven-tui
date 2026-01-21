@@ -2,14 +2,22 @@ import calendar
 from datetime import datetime
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Static, Label, Button
+from textual.widgets import Label, Button
 from messages import CalendarItemSelected
 
 class CalendarItemCard(Horizontal):
+    can_focus = True
+    BINDINGS = [
+        ("enter", "select", "Select"),
+    ]
+
     def __init__(self, item_data: dict) -> None:
         i_type = item_data.get("item_type", "unknown")
         super().__init__(classes=f"calendar-card calendar-card-{i_type}")
         self.item_data = item_data
+
+    def action_select(self) -> None:
+        self.post_message(CalendarItemSelected(self.item_data))
 
     def on_click(self) -> None:
         self.post_message(CalendarItemSelected(self.item_data))
@@ -59,17 +67,6 @@ class CalendarItemCard(Horizontal):
                 if s is not None:
                     meta.append(f"Season {s}")
                 
-            # Only add time for specific types if necessary, but removing per user request
-            # if i_type not in ("season", "episode", "movie"):
-            #     aired_at = self.item_data.get("aired_at")
-            #     if aired_at:
-            #         try:
-            #             if "T" in aired_at:
-            #                 dt = datetime.fromisoformat(aired_at)
-            #                 meta.append(dt.strftime("%I:%M %p"))
-            #         except:
-            #             pass
-            
             yield Label(" • ".join(meta), classes="calendar-card-meta")
 
 class CalendarHeader(Horizontal):

@@ -150,6 +150,11 @@ Button {
     border: solid #BE95C4;
 }
 
+.search-tile:focus {
+    background: #24243E;
+    border: double #F4D35E;
+}
+
 .search-tile.-hover-loading {
     border: dashed #F4D35E; /* Gold dashed border while waiting */
 }
@@ -268,6 +273,54 @@ Button {
 #lib-filter-search, #lib-filter-page {
     height: 1;
     padding: 0 1;
+}
+
+#lib-type-pills {
+    height: auto;
+    width: 100%;
+    margin-bottom: 1;
+    layout: grid;
+    grid-size: 3;
+    grid-gutter: 1;
+    padding: 0 1;
+}
+
+.type-pill {
+    height: 1;
+    background: #2C3E50;
+    color: #777;
+    text-align: center;
+    content-align: center middle;
+    border: none;
+}
+
+.type-pill:hover {
+    background: #3D5A80;
+    color: #AAA;
+}
+
+.type-pill.-active {
+    background: #3D5A80;
+    color: #FFF;
+    text-style: bold;
+}
+
+.checkbox-group {
+    height: auto;
+    background: transparent;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+.checkbox-group Checkbox {
+    height: 1;
+    width: 100%;
+    background: transparent;
+    border: none;
+}
+
+.checkbox-group Checkbox .checkbox--label {
+    color: #CCC;
 }
 
 .checkbox-row {
@@ -920,6 +973,11 @@ ListItem:focus .search-item-meta {
     border-left: solid #3D5A80;
 }
 
+.calendar-card:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border: solid #F4D35E;
+}
+
 .calendar-card * {
     background: transparent !important;
 }
@@ -1421,6 +1479,12 @@ ListItem:focus .search-item-meta {
 .db-list-item-container:hover {
     background: #3D5A80;
     color: #FFF;
+}
+
+.db-list-item-container:focus {
+    background: #3D5A80;
+    color: #FFF;
+    border: solid #F4D35E;
 }
 
 .db-quick-add-btn {

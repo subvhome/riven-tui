@@ -783,8 +783,15 @@ class RivenTUI(App):
         if not detailed_results:
             await grid_container.mount(Label("No results found."))
         else:
+            first_tile = None
             for item in detailed_results:
-                await grid_container.mount(SearchGridTile(item, self.api))
+                tile = SearchGridTile(item, self.api)
+                if not first_tile:
+                    first_tile = tile
+                await grid_container.mount(tile)
+            
+            if first_tile:
+                first_tile.focus()
 
     async def _render_poster(self, container: Container, tmdb_data: dict, width_hint: Optional[int] = None):
         if self.chafa_available and tmdb_data.get("poster_path"):
@@ -1202,11 +1209,8 @@ class RivenTUI(App):
         
         riven_key = self.settings.get("riven_key")
         
-        # Determine the types to send to the API. 
-        # If item_type is None (All), we explicitly ask for movies and shows to exclude episodes/seasons.
-        api_item_type = item_type
-        if api_item_type is None:
-            api_item_type = ["movie", "show"]
+        # Determine the types to send to the API.
+        api_item_type = item_type if item_type is not None else ["movie", "show"]
             
         # Call the API with all filters, limit, and page
         resp, err = await self.api.get_items(
@@ -1257,8 +1261,35 @@ class RivenTUI(App):
                     if tmdb_id:
                         details, _ = await self.api.get_tmdb_details(tmdb_m_type, tmdb_id, tmdb_token)
                         if details:
-                            details.pop("id", None) 
-                            item.update(details)
+                            # Preserve Riven-specific fields that TMDB might overwrite or lack
+                            p_title = item.get("parent_title")
+                            # Preserve all variations of S/E keys and flags
+                            preserved_vals = {
+                                k: item.get(k) for k in [
+                                    "season_number", "episode_number", 
+                                    "seasonNumber", "episodeNumber",
+                                    "season", "episode", "is_anime"
+                                ] if item.get(k) is not None
+                            }
+                            
+                            # Only take "enrichment" fields from TMDB
+                            enrichment_fields = [
+                                "tagline", "genres", "vote_average", "vote_count", 
+                                "overview", "popularity", "content_rating", "original_language"
+                            ]
+                            for field in enrichment_fields:
+                                if field in details:
+                                    item[field] = details[field]
+                            
+                            # Restore preserved fields
+                            if p_title: item["parent_title"] = p_title
+                            for k, v in preserved_vals.items():
+                                item[k] = v
+                            
+                            # Use TMDB poster if Riven doesn't provide one
+                            if not item.get("poster_path") and details.get("poster_path"):
+                                item["poster_path"] = details["poster_path"]
+                            
                             item["tmdb_id"] = tmdb_id
                 except Exception as e:
                     self.tui_logger.error(f"Failed to enrich library item: {e}")
@@ -1435,6 +1466,9 @@ class RivenTUI(App):
         if not monthly_items:
             await container.mount(Static(f"No items found for {calendar.month_name[month]} {year}.", id="calendar-no-items"))
         else:
+            target_day_num = None
+            today = datetime.now()
+            
             for date_str, items in grouped_items.items():
                 day_num = items[0]["_dt"].day
                 day_group = Vertical(classes="calendar-day-group", id=f"day-group-{day_num}")
@@ -1445,6 +1479,27 @@ class RivenTUI(App):
                 await header_row.mount(Label(f"{len(items)} item{'s' if len(items) > 1 else ''}", classes="calendar-count-label")),
                 for item in items:
                     await day_group.mount(CalendarItemCard(item))
+                
+                # Logic to find the best day to scroll to
+                # We want the first day that is >= today
+                if target_day_num is None:
+                    item_dt = items[0]["_dt"]
+                    if item_dt.year == today.year and item_dt.month == today.month:
+                        if item_dt.day >= today.day:
+                            target_day_num = day_num
+                    elif item_dt.year > today.year or (item_dt.year == today.year and item_dt.month > today.month):
+                        # Future month/year, pick the first available day
+                        target_day_num = day_num
+
+            # Perform the jump
+            if target_day_num is not None:
+                def jump_to_day():
+                    try:
+                        target_widget = container.query_one(f"#day-group-{target_day_num}")
+                        target_widget.scroll_visible(top=True, animate=False)
+                    except NoMatches:
+                        pass
+                self.set_timer(0.1, jump_to_day)
 
     @on(Button.Pressed, "#btn-prev-year-sidebar")
     async def on_prev_year_sidebar(self):
