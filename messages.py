@@ -29,8 +29,3 @@ class ToggleLibrarySelection(Message):
         super().__init__()
         self.item_id = item_id
         self.title = title
-
-class SelectionChanged(Message):
-    def __init__(self, count: int) -> None:
-        super().__init__()
-        self.count = count

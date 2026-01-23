@@ -68,31 +68,6 @@ Button {
     padding-right: 1;
 }
 
-/* Search Integrated in Sidebar */
-#sidebar-search {
-    height: auto;
-    padding: 1 1;
-    margin-bottom: 1;
-    background: transparent;
-}
-
-#search-input {
-    width: 100%;
-    height: 1;
-    border: none;
-    background: #2C3E50;
-    color: #F0F0F0;
-    padding: 0 1;
-}
-
-#search-input:focus {
-    border: none; /* Ensure no border appears on focus */
-}
-
-#sidebar-search #search-label {
-    display: none;
-}
-
 /* ========================================== */
 /* SEARCH GRID VIEW (The Media Wall)          */
 /* ========================================== */
@@ -384,21 +359,40 @@ Button {
     padding: 0;
 }
 
-#btn-apply-filters {
+#sidebar-actions-row {
+    height: 4;
     width: 100%;
-    margin-top: 0;
+    margin-top: 1;
+    background: transparent;
+}
+
+.sidebar-action-btn {
+    width: 1fr;
+    height: 4;
+    margin: 0;
+    border: none;
+    background: #2C3E50;
+    color: #CCC;
+    text-align: center;
+    padding: 0;
+}
+
+.sidebar-action-btn:hover {
+    background: #3D5A80;
+    color: #FFF;
+}
+
+#btn-apply-filters {
+    border-right: solid #141424;
 }
 
 #btn-clear-selection {
-    width: 100%;
-    margin-top: 1;
+    border-right: solid #141424;
 }
 
 #btn-advanced-toggle {
-    width: 100%;
-    margin-top: 1;
-    background: #BE95C4;
-    color: #1A1A2E;
+    /* Subtle highlight if needed, or keep it unified */
+    background: #2C3E50;
 }
 
 #sidebar-advanced-container {
@@ -512,13 +506,6 @@ MainContent.media-details-active.-stacked #main-content-container {
 
 #debug-log.-visible {
     display: block;
-}
-
-#main-content-title {
-    display: none;
-    text-style: bold underline;
-    color: #BE95C4;
-    margin-bottom: 1;
 }
 
 #log-view-layout {
@@ -762,12 +749,6 @@ ListItem:focus .search-item-meta {
     width: 100%;
 }
 
-#modal-status-label {
-    text-style: bold underline;
-    color: #BE95C4;
-    margin-bottom: 1;
-}
-
 #btn-back-to-dashboard {
     margin: 0 0;
     width: auto;
@@ -947,6 +928,34 @@ ListItem:focus .search-item-meta {
 
 #chafa-check-buttons Button {
     margin: 0 2;
+}
+
+#confirmation-container {
+    width: 60;
+    height: auto;
+    padding: 2;
+}
+
+#confirmation-title {
+    text-align: center;
+    text-style: bold;
+    color: #F4D35E;
+    margin-bottom: 1;
+}
+
+#confirmation-message {
+    text-align: center;
+    margin-bottom: 2;
+}
+
+.modal-button-row {
+    height: 3;
+    align: center middle;
+    width: 100%;
+}
+
+.modal-button-row Button {
+    margin: 0 1;
 }
 
 .scrollable-container {
@@ -1608,7 +1617,6 @@ ListItem:focus .search-item-meta {
 .db-list-item-container:focus {
     background: #3D5A80;
     color: #FFF;
-    border: solid #F4D35E;
 }
 
 .db-quick-add-btn {

@@ -14,6 +14,31 @@ from version import VERSION
 from api import RivenAPI
 from messages import RefreshPoster
 
+class ConfirmationScreen(ModalScreen[bool]):
+    def __init__(self, title: str, message: str, confirm_label: str = "Confirm", cancel_label: str = "Cancel", variant: str = "primary"):
+        super().__init__(classes="centered-modal-screen")
+        self.title_text = title
+        self.message_text = message
+        self.confirm_label = confirm_label
+        self.cancel_label = cancel_label
+        self.variant = variant
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="modal-popup", id="confirmation-container"):
+            yield Static(f"⚠️ {self.title_text}", id="confirmation-title")
+            yield Static(self.message_text, id="confirmation-message")
+            with Horizontal(classes="modal-button-row"):
+                yield Button(self.confirm_label, id="btn-confirm", variant=self.variant)
+                yield Button(self.cancel_label, id="btn-cancel")
+
+    @on(Button.Pressed, "#btn-confirm")
+    def on_confirm(self) -> None:
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#btn-cancel")
+    def on_cancel(self) -> None:
+        self.dismiss(False)
+
 class UpdateScreen(ModalScreen[bool]):
     def __init__(self, remote_version: str, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
@@ -124,18 +149,6 @@ class MediaCardScreen(ModalScreen):
         if not languages_spoken_list and tmdb_data.get('original_language'):
             languages_spoken_list.append(tmdb_data.get('original_language').upper())
         languages_spoken = " - ".join(languages_spoken_list)
-
-        # 0. Status Label (Top)
-        if riven_data:
-            state = riven_data.get('state', 'Unknown').title()
-            status_text = f"In Library | [bold]{state}[/] (Riven ID: {riven_data.get('id')})"
-        else:
-            status_text = "Not in Library"
-        
-        status_label = Static(status_text, id="modal-status-label")
-        if riven_data:
-            status_label.add_class(f"state-{riven_data.get('state', 'unknown').lower()}")
-        await container.mount(status_label)
 
         await container.mount(Static(f"[bold]{title}[/bold]", classes="media-title"))
         if tagline:

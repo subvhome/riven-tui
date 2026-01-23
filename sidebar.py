@@ -5,20 +5,8 @@ from textual.message import Message
 from textual import on
 from typing import List, Dict
 import calendar
-from search_results import SearchResultItem
 from search import SearchArea
 from messages import PageChanged
-
-class PaginationControl(Horizontal):
-    def __init__(self, page: int, total_pages: int) -> None:
-        super().__init__(id="pagination-container")
-        self.page = page
-        self.total_pages = total_pages
-
-    def compose(self) -> ComposeResult:
-        yield Button("<", id="btn-prev-page", disabled=self.page <= 1)
-        yield Label(f"P{self.page}/{self.total_pages}", classes="pagination-label")
-        yield Button(">", id="btn-next-page", disabled=self.page >= self.total_pages)
 
 class FilterPill(Static):
     class Changed(Message):
@@ -57,11 +45,7 @@ class Sidebar(Container):
         yield SearchArea(id="sidebar-search")
         yield Static("", id="sidebar-title")
         
-        # 1. Main List Container (for Search Results, etc)
-        with Vertical(id="sidebar-list-container", classes="hidden"):
-            yield ListView(id="sidebar-list")
-        
-        # 2. Library Filter Container
+        # 1. Library Filter Container
         with Vertical(id="sidebar-filters-container", classes="hidden"):
             with Vertical(classes="filter-scroll-area"):
                 yield Label("Search:")
@@ -108,9 +92,11 @@ class Sidebar(Container):
                 yield Static("1 of 1", id="sidebar-page-label", classes="red-separator")
                 yield Button(">>", id="btn-next-page", classes="blue-separator")
 
-            yield Button("Apply Filters", id="btn-apply-filters", variant="success")
-            yield Button("Clear Selection", id="btn-clear-selection", variant="primary")
-            yield Button("Advanced", id="btn-advanced-toggle")
+            with Horizontal(id="sidebar-actions-row"):
+                yield Button("Apply\nFilters", id="btn-apply-filters", classes="sidebar-action-btn")
+                yield Button("Clear\nSelection", id="btn-clear-selection", classes="sidebar-action-btn")
+                yield Button("Advanced\nSettings", id="btn-advanced-toggle", classes="sidebar-action-btn")
+
             with Vertical(id="sidebar-advanced-container", classes="hidden"):
                 with Horizontal(classes="adv-row"):
                     yield Button("Reset", id="btn-adv-reset", classes="adv-box")
@@ -119,7 +105,6 @@ class Sidebar(Container):
                 with Horizontal(classes="adv-row"):
                     yield Button("Pause", id="btn-adv-pause", classes="adv-box")
                     yield Button("Unpause", id="btn-adv-unpause", classes="adv-box")
-                    yield Button("Restart", id="btn-adv-restart", classes="adv-box")
 
         # 3. Calendar Summary Container
         with Vertical(id="sidebar-calendar-container", classes="hidden"):
@@ -193,17 +178,11 @@ class Sidebar(Container):
     def _hide_all(self) -> None:
         self.query_one("#sidebar-title", Static).update("")
         self.query_one("#sidebar-search").add_class("hidden")
-        self.query_one("#sidebar-list-container").add_class("hidden")
         self.query_one("#sidebar-filters-container").add_class("hidden")
         self.query_one("#sidebar-calendar-container").add_class("hidden")
 
     def show_blank(self) -> None:
         self._hide_all()
-
-    def show_search(self) -> None:
-        self._hide_all()
-        self.query_one("#sidebar-search").remove_class("hidden")
-        self.query_one("#sidebar-search #search-input").focus()
 
     def show_library_filters(self) -> None:
         self._hide_all()
@@ -214,20 +193,6 @@ class Sidebar(Container):
         self._hide_all()
         self.query_one("#sidebar-title", Static).update("CALENDAR")
         self.query_one("#sidebar-calendar-container").remove_class("hidden")
-
-    def update_results(self, query: str, results: list) -> None:
-        self._hide_all()
-        self.query_one("#sidebar-title", Static).update(f"Results: {query}")
-        self.query_one("#sidebar-list-container").remove_class("hidden")
-        
-        lv = self.query_one("#sidebar-list", ListView)
-        lv.clear()
-        
-        if not results:
-            lv.extend([ListItem(Label("No Results Found"))])
-        else:
-            for item in results:
-                lv.append(SearchResultItem(item))
 
     def get_filter_values(self) -> dict:
         selected_types = []

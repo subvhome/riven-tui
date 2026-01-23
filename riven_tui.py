@@ -31,12 +31,13 @@ from messages import (
 )
 from logs_view import LogsView
 from calendar_view import CalendarItemCard, CalendarHeader
-from sidebar import Sidebar, PaginationControl, FilterPill
+from sidebar import Sidebar, FilterPill
 from search import SearchSubmitted
 from search_results import LibraryItemCard
 from modals import (
     UpdateScreen, MediaCardScreen, ScrapeLogScreen, 
-    StreamSelectionScreen, FileMappingScreen, ChafaCheckScreen
+    StreamSelectionScreen, FileMappingScreen, ChafaCheckScreen,
+    ConfirmationScreen
 )
 import subprocess
 import httpx
@@ -82,7 +83,6 @@ class MainContent(Vertical):
     last_chafa_width: Optional[int] = None 
 
     def compose(self) -> ComposeResult:
-        yield Static(id="main-content-title")
         
         # New Search Grid View Components
         with Vertical(id="centered-search-container", classes="hidden"):
@@ -129,7 +129,6 @@ class MainContent(Vertical):
         self.query_one("#library-list").add_class("hidden")
         self.query_one("#main-content-json-container").add_class("hidden")
         self.query_one("#btn-back-to-actions").add_class("hidden")
-        self.query_one("#main-content-title").display = False
 
 from search_grid import SearchGridTile, HOVER_DELAY
 
@@ -229,14 +228,10 @@ class RivenTUI(App):
 
     @on(SettingsView.SettingsChanged)
     def on_settings_changed(self, message: SettingsView.SettingsChanged) -> None:
-        self.settings = message.new_settings
+        # Merge new settings into memory to avoid losing TUI-specific keys like be_config
+        self.settings.update(message.new_settings)
         self.reconfigure_redaction()
-        # Save to file
-        try:
-            with open("settings.json", "w") as f:
-                json.dump(self.settings, f, indent=4)
-        except Exception as e:
-            self.log_message(f"Error saving updated settings: {e}")
+        self.log_message("Settings updated in memory (not saved to settings.json)")
 
     def on_load(self) -> None: 
         try:
@@ -597,7 +592,6 @@ class RivenTUI(App):
             sidebar.display = True 
             sidebar.show_calendar_summary() 
             main_content.display = True
-            main_content.query_one("#main-content-title").display = False
             main_content.query_one("#main-content-container").remove_children()
             self.run_worker(self.show_calendar(refresh_cache=True))
         elif new_state == "settings":
@@ -829,7 +823,6 @@ class RivenTUI(App):
     async def show_item_actions(self, target_poster_width: Optional[int] = None):
         main_content = self.query_one(MainContent)
         main_content.add_class("media-details-active")
-        title_widget = main_content.query_one("#main-content-title")
         container = main_content.query_one("#main-content-container")
 
         # Reset visibility
@@ -865,17 +858,6 @@ class RivenTUI(App):
         genres = " - ".join([genre.get('name') for genre in tmdb_data.get('genres', []) if genre.get('name')])
         description = tmdb_data.get('overview')
         tagline = tmdb_data.get('tagline')
-
-        # Set Header
-        if riven_data:
-            state = riven_data.get('state', 'Unknown').title()
-            title_widget.display = True
-            title_widget.update(f"In Library | [bold]{state}[/] (Riven ID: {riven_data.get('id')})")
-            title_widget.add_class(f"state-{riven_data.get('state', 'unknown').lower()}")
-        else:
-            title_widget.display = True
-            title_widget.update("Not in Library")
-            title_widget.remove_class("-library-active") # Clear any old state classes
 
         # Create Split Layout
         split_layout = Horizontal(classes="media-detail-layout")
@@ -1817,8 +1799,28 @@ class RivenTUI(App):
 
         item_ids = list(self.library_selection.keys())
         count = len(item_ids)
-        riven_key = self.settings.get("riven_key")
+        
+        # Determine variant and message
+        variant = "primary"
+        if action == "remove": variant = "error"
+        elif action == "reset": variant = "warning"
+        
+        message = f"Are you sure you want to [bold]{display_name}[/] [cyan]{count}[/] items?\n\n"
+        message += "\n".join([f"• {title}" for title in list(self.library_selection.values())[:10]])
+        if count > 10:
+            message += f"\n... and {count - 10} more."
 
+        confirmed = await self.push_screen_wait(ConfirmationScreen(
+            f"Bulk {display_name}", 
+            message, 
+            confirm_label=f"Yes, {display_name}",
+            variant=variant
+        ))
+        
+        if not confirmed:
+            return
+
+        riven_key = self.settings.get("riven_key")
         self.log_message(f"Bulk {display_name}: Initiating for {count} items.")
         self.tui_logger.info(f"Bulk {display_name}: {count} items selected: {', '.join(self.library_selection.values())}")
         
@@ -1837,22 +1839,19 @@ class RivenTUI(App):
             self.log_message(f"Bulk {display_name}: Failed. Error: {response}")
 
     @on(Button.Pressed, "#btn-adv-reset")
-    async def on_bulk_reset(self): await self.handle_bulk_action("reset", "Reset")
+    def on_bulk_reset(self): self.run_worker(self.handle_bulk_action("reset", "Reset"))
 
     @on(Button.Pressed, "#btn-adv-retry")
-    async def on_bulk_retry(self): await self.handle_bulk_action("retry", "Retry")
+    def on_bulk_retry(self): self.run_worker(self.handle_bulk_action("retry", "Retry"))
 
     @on(Button.Pressed, "#btn-adv-remove")
-    async def on_bulk_remove(self): await self.handle_bulk_action("remove", "Remove")
+    def on_bulk_remove(self): self.run_worker(self.handle_bulk_action("remove", "Remove"))
 
     @on(Button.Pressed, "#btn-adv-pause")
-    async def on_bulk_pause(self): await self.handle_bulk_action("pause", "Pause")
+    def on_bulk_pause(self): self.run_worker(self.handle_bulk_action("pause", "Pause"))
 
     @on(Button.Pressed, "#btn-adv-unpause")
-    async def on_bulk_unpause(self): await self.handle_bulk_action("unpause", "Unpause")
-
-    @on(Button.Pressed, "#btn-adv-restart")
-    async def on_bulk_restart(self): await self.handle_bulk_action("restart", "Restart")
+    def on_bulk_unpause(self): self.run_worker(self.handle_bulk_action("unpause", "Unpause"))
 
     @on(Button.Pressed, "#btn-advanced-toggle")
     def on_advanced_toggle(self):
