@@ -17,7 +17,7 @@ class PaginationControl(Horizontal):
 
     def compose(self) -> ComposeResult:
         yield Button("<", id="btn-prev-page", disabled=self.page <= 1)
-        yield Label(f"Page {self.page} of {self.total_pages}", classes="pagination-label")
+        yield Label(f"P{self.page}/{self.total_pages}", classes="pagination-label")
         yield Button(">", id="btn-next-page", disabled=self.page >= self.total_pages)
 
 class FilterPill(Static):
@@ -102,12 +102,24 @@ class Sidebar(Container):
                 
                 yield Label("Limit:")
                 yield Select([("5", 5), ("10", 10), ("20", 20), ("50", 50)], prompt="Limit", id="lib-filter-limit", allow_blank=False, value=20)
-                
-                yield Label("Page:")
-                yield Input("1", placeholder="Page", id="lib-filter-page")
+
+            with Horizontal(classes="separator-row"):
+                yield Button("<<", id="btn-prev-page", classes="blue-separator")
+                yield Static("1 of 1", id="sidebar-page-label", classes="red-separator")
+                yield Button(">>", id="btn-next-page", classes="blue-separator")
 
             yield Button("Apply Filters", id="btn-apply-filters", variant="success")
-            yield Vertical(id="sidebar-lib-pagination")
+            yield Button("Clear Selection", id="btn-clear-selection", variant="primary")
+            yield Button("Advanced", id="btn-advanced-toggle")
+            with Vertical(id="sidebar-advanced-container", classes="hidden"):
+                with Horizontal(classes="adv-row"):
+                    yield Button("Reset", id="btn-adv-reset", classes="adv-box")
+                    yield Button("Retry", id="btn-adv-retry", classes="adv-box")
+                    yield Button("Remove", id="btn-adv-remove", classes="adv-box")
+                with Horizontal(classes="adv-row"):
+                    yield Button("Pause", id="btn-adv-pause", classes="adv-box")
+                    yield Button("Unpause", id="btn-adv-unpause", classes="adv-box")
+                    yield Button("Restart", id="btn-adv-restart", classes="adv-box")
 
         # 3. Calendar Summary Container
         with Vertical(id="sidebar-calendar-container", classes="hidden"):
@@ -160,6 +172,24 @@ class Sidebar(Container):
                     week_widgets.append(Button(str(day), id=f"btn-cal-day-{day}", classes=classes))
             await container.mount(Horizontal(*week_widgets, classes="calendar-grid-row"))
 
+    def update_pagination(self, page: int, total_pages: int) -> None:
+        try:
+            prev_btn = self.query_one("#btn-prev-page", Button)
+            prev_btn.disabled = page <= 1
+        except Exception:
+            pass
+
+        try:
+            next_btn = self.query_one("#btn-next-page", Button)
+            next_btn.disabled = page >= total_pages
+        except Exception:
+            pass
+
+        try:
+            self.query_one("#sidebar-page-label", Static).update(f"[bold]{page}[/] of [bold]{total_pages}[/]")
+        except Exception:
+            pass
+
     def _hide_all(self) -> None:
         self.query_one("#sidebar-title", Static).update("")
         self.query_one("#sidebar-search").add_class("hidden")
@@ -211,5 +241,8 @@ class Sidebar(Container):
             "states": self.query_one("#lib-filter-states", Select).value,
             "sort": self.query_one("#lib-filter-sort", Select).value,
             "limit": self.query_one("#lib-filter-limit", Select).value,
-            "page": self.query_one("#lib-filter-page", Input).value,
         }
+
+    def toggle_advanced(self) -> None:
+        container = self.query_one("#sidebar-advanced-container")
+        container.set_class(not container.has_class("hidden"), "hidden")

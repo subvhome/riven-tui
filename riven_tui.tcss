@@ -70,19 +70,23 @@ Button {
 
 /* Search Integrated in Sidebar */
 #sidebar-search {
-    height: 3;
+    height: auto;
     padding: 1 1;
     margin-bottom: 1;
     background: transparent;
 }
 
-#sidebar-search #search-input {
+#search-input {
     width: 100%;
     height: 1;
     border: none;
     background: #2C3E50;
     color: #F0F0F0;
     padding: 0 1;
+}
+
+#search-input:focus {
+    border: none; /* Ensure no border appears on focus */
 }
 
 #sidebar-search #search-label {
@@ -224,7 +228,6 @@ Button {
 #sidebar {
     width: 40;
     background: #141424; /* Darker, separate from main content */
-    border: none;
 }
 
 #sidebar-title {
@@ -236,13 +239,15 @@ Button {
 }
 
 #sidebar-filters-container {
-    padding: 1;
+    padding: 0;
     height: 1fr;
+    overflow-y: auto;
 }
 
 .filter-scroll-area {
     height: 1fr;
     overflow-y: auto;
+    padding: 1 1 0 1;
 }
 
 #sidebar-filters-container Label {
@@ -329,9 +334,101 @@ Button {
     margin-top: 1;
 }
 
-#btn-apply-filters {
-    margin-top: 1;
+#sidebar-selection-count {
     width: 100%;
+    text-align: center;
+    background: transparent;
+    color: #BE95C4;
+    text-style: bold italic;
+    margin-top: 0;
+    padding: 1 0;
+    border-top: dashed #3D5A80;
+}
+
+#lib-filter-limit {
+    margin-bottom: -1;
+}
+
+.separator-row {
+    height: 1;
+    width: 100%;
+    background: transparent;
+    margin-top: 0;
+    margin-bottom: 1;
+    align: center middle;
+}
+
+.green-separator {
+    width: 25%;
+    height: 1;
+    background: #6A994E;
+}
+
+.red-separator {
+    width: 30%;
+    height: 1;
+    background: transparent;
+    margin: 0;
+    color: #BE95C4;
+    text-align: center;
+    content-align: center middle;
+    text-style: bold;
+}
+
+.blue-separator {
+    width: 20%;
+    height: 1;
+    background: #3D5A80;
+    color: #FFF;
+    border: none;
+    padding: 0;
+}
+
+#btn-apply-filters {
+    width: 100%;
+    margin-top: 0;
+}
+
+#btn-clear-selection {
+    width: 100%;
+    margin-top: 1;
+}
+
+#btn-advanced-toggle {
+    width: 100%;
+    margin-top: 1;
+    background: #BE95C4;
+    color: #1A1A2E;
+}
+
+#sidebar-advanced-container {
+    width: 100%;
+    height: auto;
+    background: transparent;
+    margin-top: 1;
+    padding: 0 1;
+}
+
+.adv-row {
+    height: 3;
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.adv-box {
+    width: 1fr;
+    height: 3;
+    margin: 0 1;
+    background: #2C3E50;
+    color: #CCC;
+    border: none;
+    padding: 0;
+    min-width: 0;
+}
+
+.adv-box:hover {
+    background: #3D5A80;
+    color: #FFF;
 }
 
 #content-wrapper { width: 1fr; height: 1fr; }
@@ -403,14 +500,6 @@ MainContent.media-details-active.-stacked #main-content-container {
     width: 100%;
     margin: 1 0;
     dock: bottom;
-}
-
-
-#sidebar-lib-pagination {
-    margin-top: 1;
-    border-top: solid #3D5A80;
-    height: auto;
-    align: center middle;
 }
 
 #debug-log {
@@ -601,7 +690,7 @@ ListView, ListItem {
 
 ListItem {
     height: 4;
-    padding: 0;
+    padding: 0 1;
     margin: 0;
     border: none;
     background: #141424;
@@ -705,22 +794,57 @@ ListItem:focus .search-item-meta {
     border-left: thick #3D5A80;
 }
 
+.library-item-card.-selected {
+    background: rgba(61, 90, 128, 0.3);
+    border-left: thick #F4D35E;
+}
+
 .library-item-card:hover {
     border-left: thick #F0F0F0;
 }
 
-/* Pagination Styles */
-#pagination-container {
-    height: 3;
-    width: 100%;
-    align: center middle;
-    margin: 1 0;
+.card-main-row {
+    height: 4;
+    layout: horizontal;
+    background: transparent;
 }
 
-.pagination-label {
-    content-align: center middle;
-    padding: 0 2;
+.card-checkbox-col {
+    width: 5;
     height: 100%;
+    align: left top;
+    background: transparent;
+    padding-left: 1;
+}
+
+.card-content-col {
+    width: 1fr;
+    height: 100%;
+    background: transparent;
+    padding-left: 0;
+}
+
+.checkbox-spacer {
+    height: 1;
+    width: 100%;
+}
+
+.selection-square {
+    width: 2;
+    height: 1;
+    color: #444; /* Dim gray for ░░ */
+    background: transparent;
+}
+
+.library-item-card.-selected .selection-square {
+    color: #F4D35E; /* Vibrant gold for ███ */
+}
+
+.card-content-col {
+    width: 1fr;
+    height: 100%;
+    background: transparent;
+    padding-left: 0;
 }
 
 /* --- FileMappingScreen & Modal Styles --- */

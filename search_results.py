@@ -1,6 +1,11 @@
 from textual.app import ComposeResult
-from textual.widgets import ListItem, Label
+from textual.widgets import ListItem, Label, Static
+from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from rich.text import Text
+from textual import on
+from textual.reactive import reactive
+from messages import ToggleLibrarySelection
 
 class SearchResultItem(ListItem):
     def __init__(self, item_data: dict) -> None:
@@ -34,10 +39,45 @@ class SearchResultItem(ListItem):
         yield Label(f"{rating_text} - {genres_text}", classes="search-item-meta")
         yield Label("") # Blank line for spacing
 
+class SelectionSquare(Static):
+    class Toggle(Message):
+        pass
+
+    def __init__(self, value: bool):
+        super().__init__("██" if value else "░░", classes="selection-square")
+        self.value = value
+
+    def update_value(self, value: bool):
+        self.value = value
+        self.update("██" if value else "░░")
+
+    def on_click(self, event) -> None:
+        event.stop()
+        self.post_message(self.Toggle())
+
+class SelectionColumn(Vertical):
+    def __init__(self, selected: bool):
+        super().__init__(classes="card-checkbox-col")
+        self.selected = selected
+
+    def compose(self) -> ComposeResult:
+        yield Static("", classes="checkbox-spacer")
+        yield SelectionSquare(self.selected)
+
+    def on_click(self, event) -> None:
+        event.stop()
+        self.post_message(SelectionSquare.Toggle())
+
 class LibraryItemCard(ListItem):
-    def __init__(self, item_data: dict) -> None:
+    selected = reactive(False)
+    BINDINGS = [
+        ("space", "toggle_selection", "Toggle Selection"),
+    ]
+
+    def __init__(self, item_data: dict, initial_selected: bool = False) -> None:
         super().__init__(classes="sidebar-item-layout library-item-card")
         self.item_data = item_data
+        self.selected = initial_selected
         
         # 1. Gather essential keys
         raw_title = item_data.get('title') or item_data.get('name') or 'Unknown'
@@ -46,7 +86,7 @@ class LibraryItemCard(ListItem):
         self.year = f" [{aired_at[:4]}]" if aired_at and len(aired_at) >= 4 else ""
         self.item_type = item_data.get('type', 'movie')
         
-        # Support both snake_case and camelCase for numbers, prioritising Riven's exact keys
+        # Support both snake_case and camelCase for numbers
         self.s_num = item_data.get('season_number')
         if self.s_num is None: self.s_num = item_data.get('seasonNumber')
         if self.s_num is None: self.s_num = item_data.get('season')
@@ -67,8 +107,23 @@ class LibraryItemCard(ListItem):
 
         self.tagline = item_data.get('tagline', '')
 
+    def action_toggle_selection(self) -> None:
+        self.selected = not self.selected
+        self.post_message(ToggleLibrarySelection(str(self.item_data.get('id')), self.title))
+
+    def watch_selected(self, value: bool) -> None:
+        self.set_class(value, "-selected")
+        try:
+            self.query_one(SelectionSquare).update_value(value)
+        except:
+            pass
+
+    @on(SelectionSquare.Toggle)
+    def handle_square_toggle(self) -> None:
+        self.selected = not self.selected
+        self.post_message(ToggleLibrarySelection(str(self.item_data.get('id')), self.title))
+
     def compose(self) -> ComposeResult:
-        # 3. Specific Tagline Logic
         display_tagline = self.tagline
         
         def to_int(val):
@@ -86,47 +141,45 @@ class LibraryItemCard(ListItem):
                 display_tagline = f"Season {s_int} • {self.tagline}" if self.tagline else f"Season {s_int}"
         elif self.item_type == 'season':
             if s_int is not None:
-                # If tagline is just the season name again, skip it
                 if not self.tagline or self.tagline.lower() == f"season {s_int}":
                     display_tagline = f"Season {s_int}"
                 else:
                     display_tagline = f"Season {s_int} • {self.tagline}"
 
-        yield Label(Text.assemble((self.title, "bold"), (self.year, "dim")), classes="search-item-title")
-        yield Label(f'"{display_tagline}"' if display_tagline else "", classes="search-item-tagline")
+        with Horizontal(classes="card-main-row"):
+            yield SelectionColumn(self.selected)
+            
+            with Vertical(classes="card-content-col"):
+                yield Label(Text.assemble((self.title, "bold"), (self.year, "dim")), classes="search-item-title")
+                yield Label(f'"{display_tagline}"' if display_tagline else "", classes="search-item-tagline")
 
-        # Line 3: Meta (Rating - Genres - State - Content Rating)
-        raw_rating = self.item_data.get('vote_average') or self.item_data.get('rating') or 0
-        rating_val = float(raw_rating)
-        star = "⭐" if rating_val > 0 else ""
-        rating_text = f"{star}{rating_val:.1f}" if rating_val > 0 else "No Rating"
-        
-        genre_ids = self.item_data.get('genre_ids', [])
-        genre_names = []
-        if hasattr(self.app, "tmdb_genres"):
-            genre_names = [self.app.tmdb_genres.get(gid) for gid in genre_ids if self.app.tmdb_genres.get(gid)]
-        
-        # Fallback to local genres if TMDB enrichment isn't available
-        if not genre_names and self.item_data.get('genres'):
-            for g in self.item_data['genres']:
-                if isinstance(g, str):
-                    genre_names.append(g.capitalize())
-                elif isinstance(g, dict) and g.get('name'):
-                    genre_names.append(g['name'].capitalize())
-            
-        genres_text = ", ".join(genre_names) if genre_names else ""
-        
-        state = self.item_data.get('state', 'Unknown').title()
-        content_rating = self.item_data.get('content_rating') or 'N/A'
-        
-        meta_parts = [rating_text]
-        if genres_text: meta_parts.append(genres_text)
-        
-        # Add Anime badge if applicable
-        if self.item_data.get('is_anime'):
-            meta_parts.append("[bold magenta]Anime[/]")
-            
-        meta_parts.extend([state, content_rating])
-        
-        yield Label(" • ".join(meta_parts), classes="search-item-meta")
+                # Line 3: Meta
+                raw_rating = self.item_data.get('vote_average') or self.item_data.get('rating') or 0
+                rating_val = float(raw_rating)
+                star = "⭐" if rating_val > 0 else ""
+                rating_text = f"{star}{rating_val:.1f}" if rating_val > 0 else "No Rating"
+                
+                genre_ids = self.item_data.get('genre_ids', [])
+                genre_names = []
+                if hasattr(self.app, "tmdb_genres"):
+                    genre_names = [self.app.tmdb_genres.get(gid) for gid in genre_ids if self.app.tmdb_genres.get(gid)]
+                
+                if not genre_names and self.item_data.get('genres'):
+                    for g in self.item_data['genres']:
+                        if isinstance(g, str):
+                            genre_names.append(g.capitalize())
+                        elif isinstance(g, dict) and g.get('name'):
+                            genre_names.append(g['name'].capitalize())
+                    
+                genres_text = ", ".join(genre_names) if genre_names else ""
+                state = self.item_data.get('state', 'Unknown').title()
+                content_rating = self.item_data.get('content_rating') or 'N/A'
+                
+                meta_parts = [rating_text]
+                if genres_text: meta_parts.append(genres_text)
+                if self.item_data.get('is_anime'):
+                    meta_parts.append("[bold magenta]Anime[/]")
+                meta_parts.extend([state, content_rating])
+                
+                yield Label(" • ".join(meta_parts), classes="search-item-meta")
         yield Label("") # Blank line for spacing

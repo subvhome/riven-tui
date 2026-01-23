@@ -27,7 +27,7 @@ from search_grid import SearchGridTile, HOVER_DELAY
 from version import VERSION
 from messages import (
     RefreshPoster, LogMessage, CalendarItemSelected, 
-    PageChanged, MonthChanged
+    MonthChanged, ToggleLibrarySelection, PageChanged
 )
 from logs_view import LogsView
 from calendar_view import CalendarItemCard, CalendarHeader
@@ -207,6 +207,7 @@ class RivenTUI(App):
         self._clear_notification_timer = None
         self.refresh_delay_seconds = 3.0
         self.last_library_filters = {}
+        self.library_selection: Dict[str, str] = {} # ID -> Title
         self.calendar_cache: List[dict] = [] 
         self.navigation_source: Literal["dashboard", "library", "search", "calendar"] = "dashboard"
         self.current_trending_page = 1
@@ -273,6 +274,15 @@ class RivenTUI(App):
                 log_widget.write(message.message)
         except (NoMatches, AttributeError):
             pass
+
+    @on(ToggleLibrarySelection)
+    def on_toggle_library_selection(self, message: ToggleLibrarySelection) -> None:
+        if message.item_id in self.library_selection:
+            del self.library_selection[message.item_id]
+        else:
+            self.library_selection[message.item_id] = message.title
+        
+        self.tui_logger.debug(f"Selection changed: {len(self.library_selection)} items selected")
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="header-bar"):
@@ -578,10 +588,10 @@ class RivenTUI(App):
 
         elif new_state == "library":
             main_area.display = True
-            sidebar.display = True 
+            sidebar.display = True
             sidebar.show_library_filters() 
             main_content.display = True
-            self.run_worker(self.show_library_items(refresh_cache=True))
+            self.run_worker(self.show_library_items())
         elif new_state == "calendar":
             main_area.display = True
             sidebar.display = True 
@@ -1230,6 +1240,7 @@ class RivenTUI(App):
             self.notify(f"API Error: {err}", severity="error")
             return
 
+        self.tui_logger.debug(f"Library API response meta: total_items={resp.get('total_items')}, total_pages={resp.get('total_pages')}")
         items = resp.get("items", [])
         total_count = resp.get("total_items", resp.get("total", 0))
         total_pages = resp.get("total_pages", math.ceil(total_count / limit) if limit > 0 else 1)
@@ -1309,12 +1320,12 @@ class RivenTUI(App):
             container.add_class("hidden")
             lib_list.remove_class("hidden")
             for item in items:
-                await lib_list.append(LibraryItemCard(item))
+                is_selected = str(item.get("id")) in self.library_selection
+                await lib_list.append(LibraryItemCard(item, initial_selected=is_selected))
                 
+        # Update Pagination Controls
         sidebar = self.query_one(Sidebar)
-        pagination_area = sidebar.query_one("#sidebar-lib-pagination")
-        await pagination_area.query("*").remove()
-        await pagination_area.mount(PaginationControl(page, total_pages))
+        sidebar.update_pagination(page, total_pages)
 
     @on(ListView.Selected, "#library-list")
     async def on_library_item_clicked(self, event: ListView.Selected) -> None: 
@@ -1343,6 +1354,7 @@ class RivenTUI(App):
             self.watch_app_state("dashboard")
         elif self.navigation_source == "library":
             if self.last_library_filters:
+                # Limit might have changed, but page is no longer tracked
                 await self.show_library_items(**self.last_library_filters)
             else:
                 await self.show_library_items()
@@ -1376,22 +1388,18 @@ class RivenTUI(App):
         if self.last_library_filters:
             current_page = self.last_library_filters.get("page", 1)
             if current_page > 1:
-                new_page = current_page - 1
-                try:
-                    self.query_one("#lib-filter-page", Input).value = str(new_page)
-                except: pass
-                self.post_message(PageChanged(new_page))
+                # Update filters and reload directly
+                self.last_library_filters["page"] = current_page - 1
+                await self.show_library_items(**self.last_library_filters)
 
     @on(Button.Pressed, "#btn-next-page")
     async def on_next_page_click(self, event: Button.Pressed):
         event.stop()
         if self.last_library_filters:
             current_page = self.last_library_filters.get("page", 1)
-            new_page = current_page + 1
-            try:
-                self.query_one("#lib-filter-page", Input).value = str(new_page)
-            except: pass
-            self.post_message(PageChanged(new_page))
+            # Update filters and reload directly
+            self.last_library_filters["page"] = current_page + 1
+            await self.show_library_items(**self.last_library_filters)
 
     @on(MonthChanged)
     async def on_month_changed(self, event: MonthChanged):
@@ -1530,19 +1538,6 @@ class RivenTUI(App):
             new_year += 1
         self.current_calendar_date = self.current_calendar_date.replace(year=new_year, month=new_month)
         await self.show_calendar()
-
-    @on(PageChanged)
-    async def on_page_changed(self, event: PageChanged):
-        if not self.last_library_filters:
-            self.last_library_filters = {"page": 1, "limit": 20}
-        
-        self.last_library_filters["page"] = event.page
-        await self.show_library_items(**self.last_library_filters)
-        try:
-            page_input = self.query_one("#lib-filter-page", Input)
-            page_input.value = str(event.page)
-        except: pass
-        await self.show_library_items(**self.last_library_filters)
 
     @on(Button.Pressed, "#btn-refresh-logs")
     async def refresh_logs(self):
@@ -1799,21 +1794,78 @@ class RivenTUI(App):
         else:
             self.notify(f"Failed to add '{title}': {response}", severity="error")
 
+    @on(Button.Pressed, "#btn-clear-selection")
+    async def on_clear_selection(self):
+        if not self.library_selection:
+            self.notify("No items selected.", severity="information")
+            return
+            
+        count = len(self.library_selection)
+        self.library_selection.clear()
+        self.notify(f"Cleared selection ({count} items).", severity="success")
+        
+        # Refresh current library view to update checkboxes
+        if self.last_library_filters:
+            await self.show_library_items(**self.last_library_filters)
+        else:
+            await self.show_library_items()
+
+    async def handle_bulk_action(self, action: str, display_name: str):
+        if not self.library_selection:
+            self.notify(f"No items selected for {display_name}.", severity="warning")
+            return
+
+        item_ids = list(self.library_selection.keys())
+        count = len(item_ids)
+        riven_key = self.settings.get("riven_key")
+
+        self.log_message(f"Bulk {display_name}: Initiating for {count} items.")
+        self.tui_logger.info(f"Bulk {display_name}: {count} items selected: {', '.join(self.library_selection.values())}")
+        
+        await self.start_spinner(f"{display_name}... ({count} items)")
+        success, response = await self.api.bulk_action(action, item_ids, riven_key)
+        self.stop_spinner()
+
+        if success:
+            self.notify(f"Successfully executed {display_name} on {count} items.", severity="success")
+            self.log_message(f"Bulk {display_name}: Success.")
+            self.library_selection.clear()
+            if self.last_library_filters:
+                await self.show_library_items(**self.last_library_filters)
+        else:
+            self.notify(f"Bulk {display_name} failed: {response}", severity="error")
+            self.log_message(f"Bulk {display_name}: Failed. Error: {response}")
+
+    @on(Button.Pressed, "#btn-adv-reset")
+    async def on_bulk_reset(self): await self.handle_bulk_action("reset", "Reset")
+
+    @on(Button.Pressed, "#btn-adv-retry")
+    async def on_bulk_retry(self): await self.handle_bulk_action("retry", "Retry")
+
+    @on(Button.Pressed, "#btn-adv-remove")
+    async def on_bulk_remove(self): await self.handle_bulk_action("remove", "Remove")
+
+    @on(Button.Pressed, "#btn-adv-pause")
+    async def on_bulk_pause(self): await self.handle_bulk_action("pause", "Pause")
+
+    @on(Button.Pressed, "#btn-adv-unpause")
+    async def on_bulk_unpause(self): await self.handle_bulk_action("unpause", "Unpause")
+
+    @on(Button.Pressed, "#btn-adv-restart")
+    async def on_bulk_restart(self): await self.handle_bulk_action("restart", "Restart")
+
+    @on(Button.Pressed, "#btn-advanced-toggle")
+    def on_advanced_toggle(self):
+        self.query_one(Sidebar).toggle_advanced()
+
     @on(Button.Pressed, "#btn-apply-filters")
     async def on_apply_filters(self):
         sidebar = self.query_one(Sidebar)
         filters = sidebar.get_filter_values()
         
-        try:
-            limit = int(filters["limit"]) if filters["limit"] else 20
-            page = int(filters["page"]) if filters["page"] else 1
-        except ValueError:
-            self.notify("Page must be a number", severity="error")
-            return
-
         await self.show_library_items(
-            limit=limit,
-            page=page,
+            limit=filters["limit"],
+            page=1, # Reset to page 1
             sort=filters["sort"],
             item_type=filters["type"],
             search=filters["search"],

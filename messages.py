@@ -23,3 +23,14 @@ class MonthChanged(Message):
         self.year = year
         self.month = month
         super().__init__()
+
+class ToggleLibrarySelection(Message):
+    def __init__(self, item_id: str, title: str) -> None:
+        super().__init__()
+        self.item_id = item_id
+        self.title = title
+
+class SelectionChanged(Message):
+    def __init__(self, count: int) -> None:
+        super().__init__()
+        self.count = count
