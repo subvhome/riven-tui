@@ -8,12 +8,12 @@ Built for those who prefer staying in the shell, this TUI provides a visual way 
 
 ## What's inside
 
-- **Central Dashboard**: A single view for library statistics, service health status, recently added media, and trending content.
-- **Library Management**: Browse your collection with powerful filters (Type, State, Sort). View detailed metadata and manage items (Delete, Reset, Retry).
+- **Central Dashboard**: A single view for library statistics, service health status, recently added media, and trending content. Includes a **quick request button** `[+]` to instantly add trending items to your library.
+- **Library Management**: Browse your collection with powerful filters (Type, State, Sort). Features a compact **Action Bar** and an **Advanced Settings** toggle for selection-based batch tasks. (See **Library Bulk Actions** below for more details).
+- **Bulk Operations**: Select multiple items directly in the library view and perform batch actions (Reset, Retry, Remove, Pause, Unpause) with integrated safety confirmation modals.
 - **Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping directly from the TUI.
 - **Live Logs**: A dedicated, full-screen log viewer with real-time updates, keyword filtering, and negation support.
-- **Debug Window**: A toggleable real-time technical log overlay (`Ctrl+T`) with automated redaction of sensitive API keys and tokens.
-- **Settings Editor**: A complete, tree-based configuration editor for your Riven backend settings.
+- **Debug Window**: A toggleable real-time technical log overlay (`Ctrl+T`) with automated redaction of sensitive API keys and tokens. *Note: Data is only captured and displayed while the debug window is active.*- **Settings Editor**: A complete, tree-based configuration editor for your Riven backend settings.
 - **Advanced Management**: Mass-action suite for library maintenance. Scan external lists (like [Mdblist](https://mdblist.com/)) and bulk Delete, Reset, or Retry items in your library.
 - **Posters & Visuals**: High-resolution poster rendering using [chafa](https://hpjansson.org/chafa/) with optimized aspect ratios for standard media posters.
 
@@ -56,10 +56,14 @@ If you used the **Quick Install** script above, you can start the TUI in two way
 
 ## ⚙️ Advanced Features
 
-### Mass List Management
-The Advanced tab allows you to cross-reference your Riven library with external lists (e.g., [Mdblist](https://mdblist.com/)).
-- **Scan**: Paste a list ID or URL to find matching items in your library.
-- **Mass Action**: Delete, Reset, or Retry all matched items in a single batch.
+### Library Bulk Actions
+Located within the Library Sidebar's "Advanced Settings" toggle. 
+- **Selection**: Use the mouse to select multiple items across pages.
+- **Batch Tasks**: Execute **Reset**, **Retry**, **Remove**, **Pause**, or **Unpause** on all selected items simultaneously.
+- **Safety**: Includes a confirmation modal that lists selected items before any API calls are made.
+
+### Mass Manager (External Lists)
+The dedicated Advanced tab allows you to cross-reference your Riven library with external lists (e.g., [Mdblist](https://mdblist.com/)).
 
 ### Enriched Search & States
 Search results are automatically cross-referenced with your Riven library. Items already in your collection are badged with their current state (**Completed**, **Indexed**, **Scraped**, etc.) and color-coded for instant recognition.
@@ -78,14 +82,6 @@ Settings are managed in `settings.json`. The installer will prompt you for these
 - `log_level`: Verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
 - `log_display_limit`: Number of lines to fetch on initial log load.
 - `log_refresh_interval`: Seconds between auto-refreshes in the log view.
-
-## Controls
-
-The UI supports both keyboard and mouse.
-- **Tab**: Cycle focus between widgets.
-- **Arrows**: Navigate lists and grids.
-- **Enter**: Select items.
-- **Ctrl + T**: Toggle the secure Debug Log overlay.
 
 ---
 Built with [Textual](https://github.com/Textualize/textual).
