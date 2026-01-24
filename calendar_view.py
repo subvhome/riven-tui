@@ -6,21 +6,10 @@ from textual.widgets import Label, Button
 from messages import CalendarItemSelected
 
 class CalendarItemCard(Horizontal):
-    can_focus = True
-    BINDINGS = [
-        ("enter", "select", "Select"),
-    ]
-
     def __init__(self, item_data: dict) -> None:
         i_type = item_data.get("item_type", "unknown")
         super().__init__(classes=f"calendar-card calendar-card-{i_type}")
         self.item_data = item_data
-
-    def action_select(self) -> None:
-        self.post_message(CalendarItemSelected(self.item_data))
-
-    def on_click(self) -> None:
-        self.post_message(CalendarItemSelected(self.item_data))
 
     def _get_val(self, *keys):
         for k in keys:

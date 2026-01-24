@@ -93,6 +93,9 @@ class LogsView(Vertical):
             self.app.notify(f"Error fetching logs: {error}", severity="error")
             return
 
+        if logs is None:
+            logs = []
+
         log_widget = self.query_one("#logs-display", RichLog)
         
         if refresh_all:
