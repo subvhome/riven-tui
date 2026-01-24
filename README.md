@@ -4,7 +4,7 @@ A terminal-based management interface for [Riven](https://github.com/rivenmedia/
 
 Built for those who prefer staying in the shell, this TUI provides a visual way to monitor your library, search for content, and handle manual scrapes without opening a browser.
 
-![Dashboard](assets/welcome-dashboard.jpg)
+![Riven TUI](assets/riven-tui.gif)
 
 ## What's inside
 
@@ -13,7 +13,8 @@ Built for those who prefer staying in the shell, this TUI provides a visual way 
 - **Bulk Operations**: Select multiple items directly in the library view and perform batch actions (Reset, Retry, Remove, Pause, Unpause) with integrated safety confirmation modals.
 - **Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping directly from the TUI.
 - **Live Logs**: A dedicated, full-screen log viewer with real-time updates, keyword filtering, and negation support.
-- **Debug Window**: A toggleable real-time technical log overlay (`Ctrl+T`) with automated redaction of sensitive API keys and tokens. *Note: Data is only captured and displayed while the debug window is active.*- **Settings Editor**: A complete, tree-based configuration editor for your Riven backend settings.
+- **Debug Window**: A toggleable real-time technical log overlay (`Ctrl+T`) with automated redaction of sensitive API keys and tokens. *Note: Data is only captured and displayed while the debug window is active.*
+- **Settings Editor**: A complete, tree-based configuration editor for your Riven backend settings.
 - **Advanced Management**: Mass-action suite for library maintenance. Scan external lists (like [Mdblist](https://mdblist.com/)) and bulk Delete, Reset, or Retry items in your library.
 - **Posters & Visuals**: High-resolution poster rendering using [chafa](https://hpjansson.org/chafa/) with optimized aspect ratios for standard media posters.
 
@@ -46,13 +47,21 @@ If you used the **Quick Install** script above, you can start the TUI in two way
 
 ## Screenshots
 
-| Library | Search |
+| Dashboard | Library |
 | :---: | :---: |
-| ![Library](assets/library.jpg) | ![Search](assets/search.jpg) |
+| ![Dashboard](assets/welcome-dashboard.jpg) | ![Library](assets/library.jpg) |
 
-| Media Detail | Calendar |
+| Search | Media Detail |
 | :---: | :---: |
-| ![Media Card](assets/search-mediacard.jpg) | ![Calendar](assets/calendar.jpg) |
+| ![Search](assets/search.jpg) | ![Media Card](assets/search-mediacard.jpg) |
+
+| Calendar | Advanced |
+| :---: | :---: |
+| ![Calendar](assets/calendar.jpg) | ![Advanced](assets/advanced.jpg) |
+
+| Logs | Debug Window |
+| :---: | :---: |
+| ![Logs](assets/logs.jpg) | ![Debug Window](assets/debug-window.jpg) |
 
 ## ⚙️ Advanced Features
 
