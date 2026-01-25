@@ -167,11 +167,29 @@ class TextualLogHandler(logging.Handler):
 class MenuButton(Static):
     def __init__(self, label: str, id: str):
         super().__init__(label, id=id, classes="menu-button")
+        self.base_label = label
 
     def on_click(self) -> None:
         # Map ID back to state
         state = self.id.replace("btn-header-", "")
-        self.app.app_state = state
+        
+        # If already in this state and it is a refreshable tab, trigger a refresh
+        if self.app.app_state == state and state in ["dashboard", "library", "calendar", "settings"]:
+            self.app.log_message(f"Header: Re-clicked {state}, triggering refresh")
+            if state == "dashboard":
+                self.app.run_worker(self.app.refresh_dashboard())
+            elif state == "library":
+                if self.app.last_library_filters:
+                    self.app.run_worker(self.app.show_library_items(**self.app.last_library_filters))
+                else:
+                    self.app.run_worker(self.app.show_library_items())
+            elif state == "calendar":
+                self.app.run_worker(self.app.show_calendar(refresh_cache=True))
+            elif state == "settings":
+                settings_view = self.app.query_one("#settings-view")
+                self.app.run_worker(settings_view.load_data())
+        else:
+            self.app.app_state = state
 
 class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
@@ -394,11 +412,13 @@ class RivenTUI(App):
 
         try:
             be_url = self.build_url("be_config")
+            api_path = self.settings.get("api_base_path", "/api/v1")
+            api_overrides = self.settings.get("api_url_overrides", {})
             timeout = self.settings.get("request_timeout", 10.0)
 
-            self.tui_logger.debug(f"Initializing API with BE URL: {be_url}, timeout: {timeout}")
-            self.api = RivenAPI(be_url, timeout=timeout)
-            self.log_message(f"API Initialized: BE='{be_url}'")
+            self.tui_logger.debug(f"Initializing API with BE URL: {be_url}, path: {api_path}, timeout: {timeout}")
+            self.api = RivenAPI(be_url, api_base_path=api_path, api_url_overrides=api_overrides, timeout=timeout)
+            self.log_message(f"API Initialized: BE='{be_url}{api_path}'")
             
             # Fetch Genres for Search View
             self.tui_logger.debug("Fetching TMDB genres...")
@@ -547,13 +567,20 @@ class RivenTUI(App):
         main_content.query_one("#search-grid-scroll").add_class("hidden")
         main_content.query_one("#main-content-scroll-area").remove_class("hidden")
 
-        # Update Tab Classes - Clean and precise
-        for btn in self.query(".menu-button"):
+        # Update Tab Classes and Labels
+        for btn in self.query(MenuButton):
             btn.remove_class("-active")
+            btn.update(btn.base_label)
         
         try:
             target_id = f"#btn-header-{new_state}"
-            self.query_one(target_id).add_class("-active")
+            target_btn = self.query_one(target_id, MenuButton)
+            target_btn.add_class("-active")
+            # Only show refresh icon on tabs that support re-click refresh
+            if new_state in ["dashboard", "library", "calendar", "settings"]:
+                target_btn.update(f"{target_btn.base_label} [bold #F4D35E]↻[/]")
+            else:
+                target_btn.update(target_btn.base_label)
         except NoMatches:
             pass
 
@@ -889,7 +916,7 @@ class RivenTUI(App):
             await info_col.mount(Static(" • ".join(filter(None, metadata_items)), classes="media-metadata"))
         
         if genres:
-            await info_col.mount(Static(f"Genres: {genres}", classes="media-genres"))
+            await info_col.mount(Static(genres, classes="media-genres"))
         if description:
             await info_col.mount(Static(description, classes="media-overview"))
 
@@ -902,7 +929,7 @@ class RivenTUI(App):
                 Button("Retry", id="btn-retry", variant="primary"),
             ])
         
-        action_buttons.append(Button("Manual Scrape", id="btn-manual-scrape", variant="success"))
+        action_buttons.append(Button("Manual Scrape", id="btn-manual-scrape", variant="success", disabled=True))
         if not riven_data:
             action_buttons.append(Button("Request", id="btn-add", variant="success"))
         

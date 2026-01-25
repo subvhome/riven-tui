@@ -4,6 +4,10 @@
         "host": "localhost",
         "port": 8080
     },
+    "api_base_path": "/api/v1",
+    "api_url_overrides": {
+        "scrape_stream": "/api/scrape_stream"
+    },
     "riven_key": "YOUR_RIVEN_API_KEY",
     "request_timeout": 30.0,
     "tmdb_bearer_token": "YOUR_TMDB_BEARER_TOKEN",

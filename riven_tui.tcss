@@ -745,7 +745,7 @@ ListItem:focus .search-item-meta {
 }
 
 #modal-media-container {
-    height: auto;
+    height: 1fr;
     width: 100%;
 }
 
@@ -755,9 +755,11 @@ ListItem:focus .search-item-meta {
 }
 
 #modal-button-row {
+    dock: top;
     height: 3;
     width: 100%;
-    margin: 1 0;
+    margin: 0;
+    background: #252538;
 }
 
 #modal-scroll-area {

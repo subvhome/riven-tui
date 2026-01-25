@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional
 
 class RivenAPI:
-    def __init__(self, be_base_url, timeout=10.0):
+    def __init__(self, be_base_url, api_base_path="/api/v1", api_url_overrides=None, timeout=10.0):
         self.mdblist_api_key = "kgx75hvk95is39a6joe68tgux"
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
@@ -13,6 +13,8 @@ class RivenAPI:
         }
         self.client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers=headers)
         self.be_base_url = be_base_url
+        self.api_base_path = api_base_path.rstrip("/")
+        self.url_overrides = api_url_overrides or {}
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.mdblist_base_url = "https://api.mdblist.com"
         self.logger = logging.getLogger("Riven.API")
@@ -96,7 +98,7 @@ class RivenAPI:
 
     async def bulk_action(self, action: str, item_ids: List[str], riven_key: str):
         # action: remove, reset, retry
-        url = f"{self.be_base_url}/api/v1/items/{action}"
+        url = f"{self.be_base_url}{self.api_base_path}/items/{action}"
         headers = {
             "x-api-key": str(riven_key or ""),
             "Content-Type": "application/json",
@@ -121,7 +123,7 @@ class RivenAPI:
             return False, str(e)
 
     async def get_item_by_id(self, media_type: str, media_id: str, riven_key: str, extended: bool = False):
-        url = f"{self.be_base_url}/api/v1/items/{media_id}"
+        url = f"{self.be_base_url}{self.api_base_path}/items/{media_id}"
         headers = {"x-api-key": str(riven_key or "")}
         params = {"media_type": media_type}
         if extended:
@@ -136,7 +138,7 @@ class RivenAPI:
             return None
 
     async def add_item(self, media_type: str, id_type: str, item_id: str, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/items/add"
+        url = f"{self.be_base_url}{self.api_base_path}/items/add"
         headers = {"x-api-key": str(riven_key or "")}
         data = {"media_type": media_type, id_type: [str(item_id)]}
         self.logger.info(f"add_item: URL={url}, Data={data}")
@@ -147,7 +149,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def delete_item(self, item_id: int, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/items/remove"
+        url = f"{self.be_base_url}{self.api_base_path}/items/remove"
         headers = {"x-api-key": str(riven_key or "")}
         data = {"ids": [str(item_id)]}
         self.logger.info(f"delete_item: URL={url}, Data={data}")
@@ -158,7 +160,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def reset_item(self, item_id: int, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/items/reset"
+        url = f"{self.be_base_url}{self.api_base_path}/items/reset"
         headers = {"x-api-key": str(riven_key or "")}
         data = {"ids": [str(item_id)]}
         self.logger.info(f"reset_item: URL={url}, Data={data}")
@@ -169,7 +171,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def retry_item(self, item_id: int, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/items/retry"
+        url = f"{self.be_base_url}{self.api_base_path}/items/retry"
         headers = {"x-api-key": str(riven_key or "")}
         data = {"ids": [str(item_id)]}
         self.logger.info(f"retry_item: URL={url}, Data={data}")
@@ -180,7 +182,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def get_items(self, riven_key: str, limit: int = 50, page: int = 1, sort: Optional[str] = None, search: Optional[str] = None, extended: bool = False, count_only: bool = False, item_type: Optional[str] = None, states: Optional[List[str]] = None, timeout: Optional[float] = None):
-        url = f"{self.be_base_url}/api/v1/items"
+        url = f"{self.be_base_url}{self.api_base_path}/items"
         headers = {"x-api-key": str(riven_key or "")}
         params = {
             "limit": limit,
@@ -224,7 +226,7 @@ class RivenAPI:
 
 
     async def get_direct_logs(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/logs"
+        url = f"{self.be_base_url}{self.api_base_path}/logs"
         headers = {"x-api-key": str(riven_key or "")}
         try:
             resp = await self.client.get(url, headers=headers)
@@ -235,7 +237,7 @@ class RivenAPI:
             return None, str(e)
 
     async def upload_logs(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/upload_logs"
+        url = f"{self.be_base_url}{self.api_base_path}/upload_logs"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"upload_logs: URL={url}")
         try:
@@ -257,7 +259,11 @@ class RivenAPI:
             return None, str(e)
 
     async def scrape_stream(self, media_type: str, tmdb_id: int, riven_key: str, item_id: str = None, tvdb_id: Optional[int] = None):
-        url = f"{self.be_base_url}/api/v1/scrape/scrape_stream"
+        if "scrape_stream" in self.url_overrides:
+            url = f"{self.be_base_url}{self.url_overrides['scrape_stream']}"
+        else:
+            url = f"{self.be_base_url}{self.api_base_path}/scrape/scrape_stream"
+        
         if item_id:
             params = {"media_type": media_type, "item_id": item_id}
         elif media_type == "tv" and tvdb_id: # Use tvdb_id for TV shows if available and no item_id
@@ -288,7 +294,7 @@ class RivenAPI:
             yield f"error: {str(e)}"
 
     async def start_scrape_session(self, media_type: str, magnet: str, tmdb_id: int, riven_key: str, item_id: str = None, tvdb_id: Optional[int] = None):
-        url = f"{self.be_base_url}/api/v1/scrape/start_session"
+        url = f"{self.be_base_url}{self.api_base_path}/scrape/start_session"
         params = {"media_type": media_type, "magnet": magnet}
         if item_id:
             params["item_id"] = item_id
@@ -306,7 +312,7 @@ class RivenAPI:
             return None, str(e)
 
     async def select_scrape_file(self, session_id: str, file_metadata: dict, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/scrape/select_files/{session_id}"
+        url = f"{self.be_base_url}{self.api_base_path}/scrape/select_files/{session_id}"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"select_scrape_file: URL={url}, Data={file_metadata}")
         try:
@@ -316,7 +322,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def update_scrape_attributes(self, session_id: str, file_metadata: dict, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/scrape/update_attributes/{session_id}"
+        url = f"{self.be_base_url}{self.api_base_path}/scrape/update_attributes/{session_id}"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"update_scrape_attributes: URL={url}, Data={file_metadata}")
         try:
@@ -326,7 +332,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def complete_scrape_session(self, session_id: str, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/scrape/complete_session/{session_id}"
+        url = f"{self.be_base_url}{self.api_base_path}/scrape/complete_session/{session_id}"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"complete_scrape_session: URL={url}")
         try:
@@ -336,7 +342,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def abort_scrape_session(self, session_id: str, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/scrape/abort_session/{session_id}"
+        url = f"{self.be_base_url}{self.api_base_path}/scrape/abort_session/{session_id}"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"abort_scrape_session: URL={url}")
         try:
@@ -346,7 +352,7 @@ class RivenAPI:
             return (False, str(e))
 
     async def parse_torrent_titles(self, titles: list, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/scrape/parse"
+        url = f"{self.be_base_url}{self.api_base_path}/scrape/parse"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"parse_torrent_titles: URL={url}, Data={titles}")
         try:
@@ -495,7 +501,7 @@ class RivenAPI:
             return (None, str(e))
 
     async def get_stats(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/stats"
+        url = f"{self.be_base_url}{self.api_base_path}/stats"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"get_stats: URL={url}")
         try:
@@ -535,7 +541,7 @@ class RivenAPI:
             return {}, str(e)
 
     async def get_services(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/services"
+        url = f"{self.be_base_url}{self.api_base_path}/services"
         headers = {"x-api-key": str(riven_key or "")}
         try:
             resp = await self.client.get(url, headers=headers)
@@ -546,7 +552,7 @@ class RivenAPI:
             return None, str(e)
 
     async def get_health(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/health"
+        url = f"{self.be_base_url}{self.api_base_path}/health"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"get_health: URL={url}")
         try:
@@ -562,7 +568,7 @@ class RivenAPI:
         await self.client.aclose()
 
     async def get_calendar(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/calendar"
+        url = f"{self.be_base_url}{self.api_base_path}/calendar"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"get_calendar: URL={url}")
         try:
@@ -574,7 +580,7 @@ class RivenAPI:
             return None, str(e)
 
     async def get_settings(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/settings/get/all"
+        url = f"{self.be_base_url}{self.api_base_path}/settings/get/all"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"get_settings: URL={url}")
         try:
@@ -586,7 +592,7 @@ class RivenAPI:
             return None, str(e)
 
     async def update_settings(self, settings_data: dict, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/settings/set/all" 
+        url = f"{self.be_base_url}{self.api_base_path}/settings/set/all" 
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"update_settings: Sending payload to {url}: {settings_data}")
         try:
@@ -600,7 +606,7 @@ class RivenAPI:
             return None, str(e)
 
     async def get_schema(self, riven_key: str):
-        url = f"{self.be_base_url}/api/v1/settings/schema"
+        url = f"{self.be_base_url}{self.api_base_path}/settings/schema"
         headers = {"x-api-key": str(riven_key or "")}
         self.logger.info(f"get_schema: URL={url}")
         try:

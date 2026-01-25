@@ -120,9 +120,8 @@ class MediaCardScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-media-card"):
-            with Vertical(id="modal-scroll-area", classes="scrollable-container"):
-                yield Vertical(id="modal-media-container")
-                yield Vertical(id="modal-json-container", classes="hidden")
+            yield Vertical(id="modal-media-container")
+            yield Vertical(id="modal-json-container", classes="hidden")
             yield Button("Back to Media", id="btn-back-from-json", variant="primary", classes="hidden")
 
     async def on_mount(self):
@@ -150,25 +149,19 @@ class MediaCardScreen(ModalScreen):
             languages_spoken_list.append(tmdb_data.get('original_language').upper())
         languages_spoken = " - ".join(languages_spoken_list)
 
-        await container.mount(Static(f"[bold]{title}[/bold]", classes="media-title"))
-        if tagline:
-            await container.mount(Static(f"[italic]{tagline}[/italic]", classes="media-tagline"))
+        # Create Split Layout
+        split_layout = Horizontal(classes="media-detail-layout")
+        await container.mount(split_layout)
+        
+        info_col = Vertical(classes="media-info-column")
+        action_col = Vertical(classes="media-action-column")
+        await split_layout.mount(info_col)
+        await split_layout.mount(action_col)
 
-        action_buttons = []
-        if riven_data:
-            action_buttons.extend([
-                Button("Delete", id="btn-delete-modal", variant="error"),
-                Button("Reset", id="btn-reset-modal", variant="warning"),
-                Button("Retry", id="btn-retry-modal", variant="primary"),
-            ])
-        action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success"))
-        if not riven_data:
-            action_buttons.append(Button("Request", id="btn-add-modal", variant="success"))
-        
-        action_buttons.append(Button("Back", id="btn-back-to-dashboard", variant="primary"))
-        action_buttons.append(Button("JSON", id="btn-print-json-modal"))
-        
-        await container.mount(Horizontal(*action_buttons, classes="media-button-bar", id="modal-button-row"))
+        # 1. Populate Info Column (Left)
+        await info_col.mount(Static(f"[bold]{title}[/bold]", classes="media-title"))
+        if tagline:
+            await info_col.mount(Static(f"[italic]{tagline}[/italic]", classes="media-tagline"))
 
         meta_items = [year]
         if self.media_type == "movie" and runtime_movie:
@@ -183,15 +176,33 @@ class MediaCardScreen(ModalScreen):
         if riven_data:
             meta_items.append(f"[bold]{riven_data.get('state', 'Unknown').title()}[/]")
             
-        await container.mount(Static(" • ".join(filter(None, meta_items)), classes="media-metadata"))
+        await info_col.mount(Static(" • ".join(filter(None, meta_items)), classes="media-metadata"))
 
         if genres:
-            await container.mount(Static(f"Genres: {genres}", classes="media-genres"))
+            await info_col.mount(Static(genres, classes="media-genres"))
         if description:
-            await container.mount(Static(description, classes="media-overview"))
-            
+            await info_col.mount(Static(description, classes="media-overview"))
+
+        # 2. Populate Action Column (Right)
+        action_buttons = []
+        if riven_data:
+            action_buttons.extend([
+                Button("Delete", id="btn-delete-modal", variant="error"),
+                Button("Reset", id="btn-reset-modal", variant="warning"),
+                Button("Retry", id="btn-retry-modal", variant="primary"),
+            ])
+        action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success", disabled=True))
+        if not riven_data:
+            action_buttons.append(Button("Request", id="btn-add-modal", variant="success"))
+        
+        action_buttons.append(Button("Back", id="btn-back-to-dashboard", variant="primary"))
+        action_buttons.append(Button("JSON", id="btn-print-json-modal"))
+        
+        # Use a Horizontal bar with an ID that is docked in CSS
+        await action_col.mount(Horizontal(*action_buttons, id="modal-button-row", classes="media-button-bar"))
+
         if self.chafa_available and tmdb_data.get("poster_path"):
-            await container.mount(Static(id="poster-display-modal"))
+            await action_col.mount(Static(id="poster-display-modal"))
             self.last_chafa_width = None
             self.set_timer(0.1, lambda: self.post_message(RefreshPoster()))
 
@@ -205,11 +216,24 @@ class MediaCardScreen(ModalScreen):
     async def on_refresh_poster(self, message: RefreshPoster) -> None:
         try:
             poster_widget = self.query_one("#poster-display-modal", Static)
-            container = self.query_one("#modal-media-container")
         except NoMatches:
             return
 
-        target_width = max(10, container.size.width - 8)
+        # Try to measure the actual action column if it exists (most accurate)
+        target_width = None
+        try:
+            action_col = self.query_one(".media-action-column")
+            if action_col.size.width > 0:
+                # Subtract padding (2) + border (1) + safety (3) = 6
+                target_width = max(10, action_col.size.width - 6)
+        except NoMatches:
+            pass
+
+        if target_width is None:
+            # Fallback calculation
+            container = self.query_one("#modal-media-container")
+            target_width = max(10, int(container.size.width * 0.75) - 14)
+
         chafa_max_width = self.settings.get("chafa_max_width", 50)
         if chafa_max_width > 0:
             target_width = min(target_width, chafa_max_width)
