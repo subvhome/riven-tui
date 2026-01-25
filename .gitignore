@@ -29,3 +29,8 @@ Thumbs.db
 # Tooling
 .gemini/
 .geminiignore
+
+# Scrape Temp Files
+cookies.txt
+login_response.json
+test_scrape.sh
