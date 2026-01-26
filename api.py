@@ -148,6 +148,22 @@ class RivenAPI:
         except Exception as e:
             return (False, str(e))
 
+    async def bulk_add_items(self, media_type: str, id_type: str, item_ids: List[str], riven_key: str):
+        url = f"{self.be_base_url}{self.api_base_path}/items/add"
+        headers = {"x-api-key": str(riven_key or "")}
+        # The API expects tmdb_ids or tvdb_ids as an array
+        data = {
+            "media_type": media_type,
+            "tmdb_ids": item_ids if id_type == "tmdb_ids" else [],
+            "tvdb_ids": item_ids if id_type == "tvdb_ids" else []
+        }
+        self.logger.info(f"bulk_add_items: URL={url}, Type={media_type}, Count={len(item_ids)}")
+        try:
+            resp = await self.client.post(url, headers=headers, json=data)
+            return (True, resp.json()) if resp.status_code == 200 else (False, f"Status: {resp.status_code}, Body: {resp.text}")
+        except Exception as e:
+            return (False, str(e))
+
     async def delete_item(self, item_id: int, riven_key: str):
         url = f"{self.be_base_url}{self.api_base_path}/items/remove"
         headers = {"x-api-key": str(riven_key or "")}

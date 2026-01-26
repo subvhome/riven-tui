@@ -1,22 +1,22 @@
 # Riven TUI
 
-A terminal-based management interface for [Riven](https://github.com/rivenmedia/riven). 
+A high-performance terminal-based alternative to the Riven Web interface. 
 
-Built for those who prefer staying in the shell, this TUI provides a visual way to monitor your library, search for content, and maintain your collection without opening a browser.
+Riven TUI turns your shell into a dedicated media kiosk, allowing you to discover, request, and monitor your entire collection with the speed and efficiency of a native terminal application.
 
-![Riven TUI](assets/riven-tui.gif)
+<p align="center">
+  <img src="assets/riven-tui.gif" width="85%" />
+</p>
 
-## Key Features
+## Features & Capabilities
 
-- **Central Dashboard**: Real-time library statistics, service health status, recently added media, and trending content with a **quick request button** `[+]` for instant additions.
-- **Library Management**: Browse your collection with deep filtering (Type, State, Sort). Includes a compact **Action Bar** for rapid navigation and filter application.
-- **Bulk Operations**: Multi-select items directly in the library view to perform batch **Reset**, **Retry**, **Remove**, **Pause**, or **Unpause** tasks with integrated safety confirmation modals.
-- ~~**Manual Scraping**: A full workflow for stream discovery, torrent selection, and file-to-episode mapping directly from the TUI.~~ *(Temporarily disabled)*
-- **Live Logs**: Dedicated full-screen log viewer with real-time updates, keyword filtering, and negation support.
-- **Settings Editor**: Complete tree-based configuration editor for all Riven backend settings.
-- **Advanced Suite**: Mass-action maintenance tools and external list scanning (e.g., [Mdblist](https://mdblist.com/)).
-- **Posters & Visuals**: High-resolution poster rendering using [chafa](https://hpjansson.org/chafa/).
-- **Debug Window**: Toggleable real-time technical log overlay (`Ctrl+T`) with automated redaction of sensitive API keys. *(Active-only capture)*
+- **Complete Web UI Replacement**: Manage your Riven lifecycle entirely from the terminal. Monitor server health, library statistics, and collection distribution at a glance.
+- **Frictionless Media Requesting**: A streamlined "Media Wall" powered by TMDB. Use the quick-add `[+]` button on trending items or deeper metadata cards to get content into your system instantly.
+- **Real-Time Library Governance**: Deep cross-referencing between TMDB and your Riven backend. Items are color-coded and badged by their current pipeline state (e.g., *Completed, Indexed, Scraped*).
+- **Integrated Maintenance Suite**: Power tools for collection cleanup. Multi-select items across your library to perform batch **Reset, Retry, Remove, Pause,** or **Unpause** tasks with safety confirmations.
+- **Transparent Troubleshooting**: A dedicated full-screen log viewer with keyword filtering and a secure, redacted debug overlay (`Ctrl+T`) for real-time technical monitoring.
+- ~~**Manual Scrape Workflow**: Surgical stream discovery and file-to-episode mapping directly within the TUI.~~ *(Temporarily disabled for backend stabilization)*
+- **Native Visual Experience**: High-resolution poster rendering using `chafa` and a fully localized calendar view for tracking upcoming releases.
 
 ## Installation
 
@@ -48,29 +48,15 @@ curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh |
 | :---: | :---: |
 | ![Logs](assets/logs.jpg) | ![Debug Window](assets/debug-window.jpg) |
 
-## ⚙️ Core Functionality
-
-### Selection & Batch Tasks
-Located within the Library Sidebar's "Advanced Settings" toggle. 
-- **Multi-Select**: Use the mouse to select items across pages.
-- **Safety First**: Confirmation modals list all selected titles before any API calls are executed.
-- **Batch Actions**: Instantly trigger Reset, Retry, Remove, Pause, or Unpause for your entire selection.
-
-### Mass Manager (External Lists)
-The Advanced tab allows you to cross-reference your Riven library with external lists to find matches and perform bulk maintenance.
-
-### Enriched Search
-Search results are automatically cross-referenced with your Riven library. Existing items are badged with their current state (**Completed**, **Indexed**, **Scraped**, etc.) and color-coded for instant recognition.
-
 ## Configuration
 
-Settings are managed in `settings.json` or via the in-app editor:
+Settings can be managed in `settings.json` or via the interactive in-app **Settings Tree**:
 
 - `riven_key`: Your Riven API key.
-- `tmdb_bearer_token`: [TMDB Read Access Token](https://www.themoviedb.org/settings/api).
+- `tmdb_bearer_token`: TMDB Read Access Token for discovery.
 - `be_config`: Connection details for your Riven backend.
-- `chafa_max_width`: Maximum width for poster rendering.
-- `log_display_limit`: Lines to fetch on initial log load.
+- `api_url_overrides`: Granular control over specific API endpoint paths.
+- `chafa_max_width`: Maximum width for rendered media posters.
 
 ---
 Built with [Textual](https://github.com/Textualize/textual).

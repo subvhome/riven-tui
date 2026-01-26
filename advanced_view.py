@@ -5,34 +5,185 @@ from textual import on
 from typing import List
 import asyncio
 
+from textual.reactive import reactive
+
 class AdvancedView(Vertical):
     matched_ids: List[str] = []
+    show_mdblist = reactive(False)
+    show_import_export = reactive(False)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="advanced-container"):
-            yield Label("MDBLIST MASS MANAGER (Enter ID or URL)", classes="advanced-label")
+            # 1. MDBList Section
+            yield Static("MDBList Bulk Manager ▶", id="mdblist-header", classes="advanced-header-toggle")
             
-            with Horizontal(classes="advanced-row"):
-                yield Input(placeholder="Paste Mdblist ID here...", id="adv-mdblist-input")
-                yield Button("Scan Library", id="btn-adv-scan", variant="primary")
+            with Vertical(id="mdblist-bulk-area", classes="bulk-area-panel"):
+                with Horizontal(classes="advanced-row"):
+                    yield Input(placeholder="Paste Mdblist ID here...", id="adv-mdblist-input")
+                    yield Button("Scan Library", id="btn-adv-scan", variant="primary")
 
-            yield Static("", id="adv-status-line", classes="advanced-status")
+                yield Static("", id="adv-status-line", classes="advanced-status")
 
-            with Vertical(id="adv-matched-container", classes="advanced-scroll-box"):
-                yield Label("MATCHED TITLES", classes="advanced-sub-label")
-                yield ListView(id="adv-matched-list")
+                with Vertical(id="adv-matched-container", classes="advanced-scroll-box"):
+                    yield Label("MATCHED TITLES", classes="advanced-sub-label")
+                    yield ListView(id="adv-matched-list")
 
-            with Horizontal(classes="advanced-row", id="adv-actions-row"):
-                yield Button("Mass Delete", id="btn-adv-delete", variant="error", disabled=True)
-                yield Button("Mass Reset", id="btn-adv-reset", variant="warning", disabled=True)
-                yield Button("Mass Retry", id="btn-adv-retry", variant="primary", disabled=True)
+                with Horizontal(classes="advanced-row", id="adv-actions-row"):
+                    yield Button("Mass Delete", id="btn-adv-delete", variant="error", disabled=True)
+                    yield Button("Mass Reset", id="btn-adv-reset", variant="warning", disabled=True)
+                    yield Button("Mass Retry", id="btn-adv-retry", variant="primary", disabled=True)
 
-            yield Static("─" * 40, classes="advanced-sep")
+            # 2. Import/Export Section
+            yield Static("Import/Export Library ▶", id="import-export-header", classes="advanced-header-toggle")
             
-            yield Label("TRAKT.TV INTEGRATION", classes="advanced-label")
-            with Horizontal(classes="advanced-row"):
-                yield Button("Connect Trakt", id="btn-trakt-auth", disabled=True)
-                yield Label("(Disabled - Placeholder)", classes="advanced-hint")
+            with Vertical(id="import-export-area", classes="bulk-area-panel"):
+                with Horizontal(classes="advanced-row"):
+                    yield Button("Export Library", id="btn-export-lib", variant="primary")
+                    yield Button("Import Library", id="btn-import-lib", variant="success")
+                
+                yield Static("", id="export-status", classes="advanced-status")
+
+    @on(Button.Pressed, "#btn-import-lib")
+    async def on_import(self) -> None:
+        status = self.query_one("#export-status", Static)
+        import os
+        import json
+        
+        file_path = "riven_export.json"
+        if not os.path.exists(file_path):
+            status.update(f"[red]Error: {file_path} not found.[/]")
+            return
+
+        status.update("[yellow]Reading export file...[/]")
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+        except Exception as e:
+            status.update(f"[red]Read Error: {e}[/]")
+            return
+
+        if not data:
+            status.update("[yellow]Export file is empty.[/]")
+            return
+
+        riven_key = self.app.settings.get("riven_key")
+        
+        # Group by type
+        movies = [item["id"] for item in data if item["type"] == "movie"]
+        shows = [item["id"] for item in data if item["type"] == "show"]
+        
+        total = len(movies) + len(shows)
+        status.update(f"[yellow]Importing {total} items ({len(movies)} movies, {len(shows)} shows)...[/]")
+        
+        batch_size = 50 # Safe batch size for processing
+        imported_count = 0
+
+        async def process_batches(items, m_type, id_type):
+            nonlocal imported_count
+            for i in range(0, len(items), batch_size):
+                batch = items[i:i + batch_size]
+                status.update(f"[yellow]Importing {m_type}s: {imported_count}/{total}...[/]")
+                success, msg = await self.app.api.bulk_add_items(m_type, id_type, batch, riven_key)
+                if success:
+                    imported_count += len(batch)
+                else:
+                    self.app.log_message(f"Import Error ({m_type}): {msg}")
+
+        # Process movies (TMDB)
+        if movies:
+            await process_batches(movies, "movie", "tmdb_ids")
+        
+        # Process shows (TVDB)
+        if shows:
+            # Map internal 'show' type to API 'tv' type
+            await process_batches(shows, "tv", "tvdb_ids")
+
+        status.update(f"[bold green]Import complete! Processed {imported_count}/{total} items.[/]")
+
+    def watch_show_mdblist(self, show: bool) -> None:
+        self._update_panel("#mdblist-bulk-area", "#mdblist-header", "MDBList Bulk Manager", show)
+
+    def watch_show_import_export(self, show: bool) -> None:
+        self._update_panel("#import-export-area", "#import-export-header", "Import/Export Library", show)
+
+    def _update_panel(self, area_id: str, header_id: str, label: str, show: bool) -> None:
+        try:
+            self.query_one(area_id).display = show
+            header = self.query_one(header_id, Static)
+            arrow = "▼" if show else "▶"
+            header.update(f"{label} {arrow}")
+        except:
+            pass
+
+    def on_click(self, event) -> None:
+        if event.widget.id == "mdblist-header":
+            self.show_mdblist = not self.show_mdblist
+        elif event.widget.id == "import-export-header":
+            self.show_import_export = not self.show_import_export
+
+    @on(Button.Pressed, "#btn-export-lib")
+    async def on_export(self) -> None:
+        status = self.query_one("#export-status", Static)
+        status.update("[yellow]Initializing export file...[/]")
+        
+        riven_key = self.app.settings.get("riven_key")
+        limit = 500 # Keep URL length and server load safe
+        
+        # 1. Get total items to establish the range
+        resp, err = await self.app.api.get_items(riven_key, limit=1, item_type=["movie", "show"])
+        if err or not resp:
+            status.update(f"[red]Export Error: {err}[/]")
+            return
+            
+        total = resp.get("total_items", 0)
+        if total == 0:
+            status.update("[yellow]Library is empty.[/]")
+            return
+            
+        total_pages = (total + limit - 1) // limit
+        export_file = "riven_export.json"
+        
+        # 2. Sequential Batching
+        count = 0
+        import json
+        
+        try:
+            with open(export_file, "w") as f:
+                # Start the JSON array
+                f.write("[\n")
+                
+                for page in range(1, total_pages + 1):
+                    status.update(f"[yellow]Processing {count}/{total} (Batch {page}/{total_pages})...[/]")
+                    
+                    page_resp, page_err = await self.app.api.get_items(riven_key, limit=limit, page=page, item_type=["movie", "show"])
+                    
+                    if page_resp and "items" in page_resp:
+                        items = page_resp["items"]
+                        for i, item in enumerate(items):
+                            i_type = item.get("type")
+                            p_ids = item.get("parent_ids") or {}
+                            entry = None
+                            
+                            if i_type == "movie":
+                                val = p_ids.get("tmdb_id")
+                                if val: entry = {"type": "movie", "id": str(val)}
+                            elif i_type == "show":
+                                val = p_ids.get("tvdb_id")
+                                if val: entry = {"type": "show", "id": str(val)}
+                            
+                            if entry:
+                                json_str = json.dumps(entry)
+                                # Write entry with comma unless it is the very last item of the very last page
+                                is_last = (page == total_pages and i == len(items) - 1)
+                                f.write(f"    {json_str}{'' if is_last else ','}\n")
+                                count += 1
+                
+                # Close the JSON array
+                f.write("]\n")
+                
+            status.update(f"[green]Export complete! Saved {count} items to {export_file}[/]")
+        except Exception as e:
+            status.update(f"[red]Write Error: {e}[/]")
 
     @on(Button.Pressed, "#btn-adv-scan")
     async def on_scan(self) -> None:

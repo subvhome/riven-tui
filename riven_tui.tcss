@@ -1248,6 +1248,7 @@ ListItem:focus .search-item-meta {
     width: 100%;
     height: 100%;
     padding: 2 4;
+    overflow-y: auto;
 }
 
 #advanced-container {
@@ -1255,10 +1256,32 @@ ListItem:focus .search-item-meta {
     height: auto;
 }
 
+.bulk-area-panel {
+    height: auto;
+    width: 100%;
+    background: #1E1E32;
+    padding: 2 4;
+    border-left: thick #BE95C4;
+    margin-bottom: 1;
+}
+
 .advanced-label {
     text-style: bold;
     color: #BE95C4;
     margin-bottom: 1;
+}
+
+.advanced-header-toggle {
+    text-style: bold;
+    color: #BE95C4;
+    margin-bottom: 1;
+    background: transparent;
+    padding: 0 1;
+}
+
+.advanced-header-toggle:hover {
+    background: #3D5A80;
+    color: #FFF;
 }
 
 .advanced-row {
@@ -1293,7 +1316,7 @@ ListItem:focus .search-item-meta {
 }
 
 .advanced-scroll-box {
-    height: 12; /* Medium size */
+    height: 15; /* Increased slightly for better visibility */
     border: solid #3D5A80;
     margin-bottom: 1;
     padding: 0 1;
