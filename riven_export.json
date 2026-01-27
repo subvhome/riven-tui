@@ -1,10 +1,4 @@
 [
-    {
-        "type": "movie",
-        "id": "497"
-    },
-    {
-        "type": "movie",
-        "id": "13"
-    }
+    {"type": "movie", "id": "13"},
+    {"type": "movie", "id": "497"}
 ]

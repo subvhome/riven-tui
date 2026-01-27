@@ -4,6 +4,7 @@ from textual.widgets import Static, Label, Button, Input, Log, ListView, ListIte
 from textual import on
 from typing import List
 import asyncio
+from modals import ConfirmationScreen
 
 from textual.reactive import reactive
 
@@ -42,9 +43,21 @@ class AdvancedView(Vertical):
                     yield Button("Import Library", id="btn-import-lib", variant="success")
                 
                 yield Static("", id="export-status", classes="advanced-status")
+                yield Static("") # Blank line spacer
+                
+                yield Label("Usage Notes:", classes="advanced-sub-label")
+                yield Label(
+                    "• [bold]Export[/]: Saves IDs to [cyan]riven_export.json[/]\n"
+                    "• [bold]Migration[/]: Move file to new instance folder\n"
+                    "• [bold]Import[/]: Requests all items from file",
+                    classes="advanced-hint"
+                )
 
     @on(Button.Pressed, "#btn-import-lib")
-    async def on_import(self) -> None:
+    def on_import_click(self) -> None:
+        self.run_worker(self.perform_import())
+
+    async def perform_import(self) -> None:
         status = self.query_one("#export-status", Static)
         import os
         import json
@@ -54,51 +67,98 @@ class AdvancedView(Vertical):
             status.update(f"[red]Error: {file_path} not found.[/]")
             return
 
-        status.update("[yellow]Reading export file...[/]")
-        try:
-            with open(file_path, "r") as f:
-                data = json.load(f)
-        except Exception as e:
-            status.update(f"[red]Read Error: {e}[/]")
-            return
-
-        if not data:
-            status.update("[yellow]Export file is empty.[/]")
+        # 1. Ask for confirmation
+        confirmed = await self.app.push_screen_wait(ConfirmationScreen(
+            "Import Library",
+            f"Are you sure you want to import items from [cyan]{file_path}[/]?\n\nExisting items will be automatically skipped.",
+            confirm_label="Yes, Import",
+            variant="success"
+        ))
+        
+        if not confirmed:
             return
 
         riven_key = self.app.settings.get("riven_key")
         
-        # Group by type
-        movies = [item["id"] for item in data if item["type"] == "movie"]
-        shows = [item["id"] for item in data if item["type"] == "show"]
+        # 2. Sync existing library IDs to avoid duplicates
+        status.update("[yellow]Syncing current library state...[/]")
+        existing_ids = set() # Store as strings for easy matching
         
-        total = len(movies) + len(shows)
-        status.update(f"[yellow]Importing {total} items ({len(movies)} movies, {len(shows)} shows)...[/]")
+        limit = 500
+        resp, err = await self.app.api.get_items(riven_key, limit=1)
+        if resp:
+            total_items = resp.get("total_items", 0)
+            total_pages = (total_items + limit - 1) // limit
+            for page in range(1, total_pages + 1):
+                status.update(f"[yellow]Syncing library: {len(existing_ids)}/{total_items}...[/]")
+                page_resp, _ = await self.app.api.get_items(riven_key, limit=limit, page=page)
+                if page_resp and "items" in page_resp:
+                    for item in page_resp["items"]:
+                        p_ids = item.get("parent_ids") or {}
+                        # Capture both types of IDs
+                        tid = item.get("tmdb_id") or p_ids.get("tmdb_id")
+                        tvid = item.get("tvdb_id") or p_ids.get("tvdb_id")
+                        if tid: existing_ids.add(str(tid))
+                        if tvid: existing_ids.add(str(tvid))
+
+        # 3. Read and filter import file
+        status.update("[yellow]Analyzing import file...[/]")
+        try:
+            with open(file_path, "r") as f:
+                import_data = json.load(f)
+        except Exception as e:
+            status.update(f"[red]Read Error: {e}[/]")
+            return
+
+        new_movies = []
+        new_shows = []
+        skipped_count = 0
         
-        batch_size = 50 # Safe batch size for processing
+        for item in import_data:
+            item_id = str(item.get("id"))
+            if item_id in existing_ids:
+                skipped_count += 1
+                continue
+            
+            if item["type"] == "movie":
+                new_movies.append(item_id)
+            else:
+                new_shows.append(item_id)
+
+        total_to_import = len(new_movies) + len(new_shows)
+        if total_to_import == 0:
+            status.update(f"[green]Import complete: {skipped_count} items skipped (already in library).[/]")
+            return
+
+        # 4. Perform Batched Import
+        status.update(f"[yellow]Importing {total_to_import} new items (Skipping {skipped_count})...[/]")
+        
+        batch_size = 50
         imported_count = 0
+        error_count = 0
 
         async def process_batches(items, m_type, id_type):
-            nonlocal imported_count
+            nonlocal imported_count, error_count
             for i in range(0, len(items), batch_size):
                 batch = items[i:i + batch_size]
-                status.update(f"[yellow]Importing {m_type}s: {imported_count}/{total}...[/]")
+                status.update(f"[yellow]Importing {m_type}s: {imported_count}/{total_to_import}...[/]")
                 success, msg = await self.app.api.bulk_add_items(m_type, id_type, batch, riven_key)
                 if success:
                     imported_count += len(batch)
                 else:
+                    error_count += len(batch)
                     self.app.log_message(f"Import Error ({m_type}): {msg}")
 
-        # Process movies (TMDB)
-        if movies:
-            await process_batches(movies, "movie", "tmdb_ids")
-        
-        # Process shows (TVDB)
-        if shows:
-            # Map internal 'show' type to API 'tv' type
-            await process_batches(shows, "tv", "tvdb_ids")
+        if new_movies: await process_batches(new_movies, "movie", "tmdb_ids")
+        if new_shows: await process_batches(new_shows, "tv", "tvdb_ids")
 
-        status.update(f"[bold green]Import complete! Processed {imported_count}/{total} items.[/]")
+        # 5. Final Report
+        status.update(
+            f"[bold green]Import finished![/]\n"
+            f"• [green]Imported:[/] {imported_count}\n"
+            f"• [yellow]Skipped:[/] {skipped_count}\n"
+            f"• [red]Errors:[/] {error_count}"
+        )
 
     def watch_show_mdblist(self, show: bool) -> None:
         self._update_panel("#mdblist-bulk-area", "#mdblist-header", "MDBList Bulk Manager", show)
