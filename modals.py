@@ -306,8 +306,23 @@ class MediaCardScreen(ModalScreen):
             self.app.notify(f"Failed to add: {response}", severity="error")
 
     @on(Button.Pressed, "#btn-delete-modal")
+    def on_delete_click(self) -> None:
+        self.app.run_worker(self.handle_delete())
+
     async def handle_delete(self):
         item_id = self.riven_data.get("id")
+        title = self.tmdb_data.get("title") or self.tmdb_data.get("name") or "Unknown Item"
+        
+        confirmed = await self.app.push_screen_wait(ConfirmationScreen(
+            "Delete Item",
+            f"Are you sure you want to delete [bold]{title}[/] from your library?",
+            confirm_label="Yes, Delete",
+            variant="error"
+        ))
+        
+        if not confirmed:
+            return
+
         success, _ = await self.api.delete_item(item_id, self.settings.get("riven_key"))
         if success:
             self.app.notify("Item deleted", severity="success")
@@ -317,8 +332,23 @@ class MediaCardScreen(ModalScreen):
             self.app.notify("Failed to delete item.", severity="error")
 
     @on(Button.Pressed, "#btn-reset-modal")
+    def on_reset_click(self) -> None:
+        self.app.run_worker(self.handle_reset())
+
     async def handle_reset(self):
         item_id = self.riven_data.get("id")
+        title = self.tmdb_data.get("title") or self.tmdb_data.get("name") or "Unknown Item"
+
+        confirmed = await self.app.push_screen_wait(ConfirmationScreen(
+            "Reset Item",
+            f"Are you sure you want to reset [bold]{title}[/]?\nThis will restart the download/scrape process.",
+            confirm_label="Yes, Reset",
+            variant="warning"
+        ))
+        
+        if not confirmed:
+            return
+
         success, _ = await self.api.reset_item(item_id, self.settings.get("riven_key"))
         if success:
             self.app.notify("Item reset successfully.", severity="information")
@@ -327,8 +357,23 @@ class MediaCardScreen(ModalScreen):
             self.app.notify("Failed to reset item.", severity="error")
 
     @on(Button.Pressed, "#btn-retry-modal")
+    def on_retry_click(self) -> None:
+        self.app.run_worker(self.handle_retry())
+
     async def handle_retry(self):
         item_id = self.riven_data.get("id")
+        title = self.tmdb_data.get("title") or self.tmdb_data.get("name") or "Unknown Item"
+
+        confirmed = await self.app.push_screen_wait(ConfirmationScreen(
+            "Retry Item",
+            f"Are you sure you want to retry [bold]{title}[/]?\nThis will attempt to re-process the item.",
+            confirm_label="Yes, Retry",
+            variant="primary"
+        ))
+        
+        if not confirmed:
+            return
+
         success, _ = await self.api.retry_item(item_id, self.settings.get("riven_key"))
         if success:
             self.app.notify("Item sent for retry.", severity="information")

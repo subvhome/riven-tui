@@ -31,7 +31,7 @@ from messages import (
 )
 from logs_view import LogsView
 from calendar_view import CalendarItemCard, CalendarHeader
-from sidebar import Sidebar, FilterPill
+from sidebar import Sidebar, FilterPill, ApplyFilters
 from search import SearchSubmitted
 from search_results import LibraryItemCard
 from modals import (
@@ -296,6 +296,10 @@ class RivenTUI(App):
             self.library_selection[message.item_id] = message.title
         
         self.tui_logger.debug(f"Selection changed: {len(self.library_selection)} items selected")
+        try:
+            self.query_one(Sidebar).update_selection_count(len(self.library_selection))
+        except:
+            pass
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="header-bar"):
@@ -1334,7 +1338,7 @@ class RivenTUI(App):
                 
         # Update Pagination Controls
         sidebar = self.query_one(Sidebar)
-        sidebar.update_pagination(page, total_pages)
+        sidebar.update_pagination(page, total_pages, total_count, len(self.library_selection))
 
     @on(ListView.Selected, "#library-list")
     async def on_library_item_clicked(self, event: ListView.Selected) -> None: 
@@ -1480,11 +1484,77 @@ class RivenTUI(App):
         for f_type, label in filters:
             pill = FilterPill(label, value=self.calendar_filters[f_type], filter_type=f_type)
             await legend_row.mount(pill)
-        if not monthly_items:
-            await container.mount(Static(f"No items found for {calendar.month_name[month]} {year}.", id="calendar-no-items"))
+        sidebar = self.query_one(Sidebar)
+        await sidebar.update_calendar_grid(year, month, active_days)
+
+        await container.query("*").remove()
+        await container.mount(CalendarHeader(year, month))
+        legend_row = Horizontal(id="calendar-legend-row")
+        await container.mount(legend_row)
+        filters = [("movie", "Movies"), ("episode", "Episodes"), ("show", "Shows"), ("season", "Seasons")]
+        for f_type, label in filters:
+            pill = FilterPill(label, value=self.calendar_filters[f_type], filter_type=f_type)
+            await legend_row.mount(pill)
+            
+        # Logic to find the best day to scroll to or prompt for next event
+        today = datetime.now()
+        has_future_items_this_month = any(item["_dt"].date() >= today.date() for item in monthly_items)
+        
+        if not monthly_items or (not has_future_items_this_month and year == today.year and month == today.month):
+            if not monthly_items:
+                await container.mount(Static(f"No items found for {calendar.month_name[month]} {year}.", id="calendar-no-items"))
+            else:
+                # Render the past items normally
+                target_day_num = None
+                for date_str, items in grouped_items.items():
+                    day_num = items[0]["_dt"].day
+                    day_group = Vertical(classes="calendar-day-group", id=f"day-group-{day_num}")
+                    await container.mount(day_group)
+                    header_row = Horizontal(classes="calendar-day-header")
+                    await day_group.mount(header_row)
+                    await header_row.mount(Label(date_str, classes="calendar-date-label")),
+                    await header_row.mount(Label(f"{len(items)} item{'s' if len(items) > 1 else ''}", classes="calendar-count-label")),
+                    for item in items:
+                        await day_group.mount(CalendarItemCard(item))
+                    
+                    if target_day_num is None: # Just scroll to first one if all are past
+                        target_day_num = day_num
+
+                if target_day_num is not None:
+                    def jump_to_day():
+                        try:
+                            target_widget = container.query_one(f"#day-group-{target_day_num}")
+                            target_widget.scroll_visible(top=True, animate=False)
+                        except NoMatches:
+                            pass
+                    self.set_timer(0.1, jump_to_day)
+
+            # Check for next available event in FUTURE months
+            next_event_date = None
+            viewed_month_end = datetime(year, month, calendar.monthrange(year, month)[1], 23, 59, 59)
+            
+            for item in self.calendar_cache:
+                aired_at_str = item.get("aired_at")
+                if not aired_at_str: continue
+                try:
+                    if "T" in aired_at_str:
+                        dt = datetime.fromisoformat(aired_at_str)
+                    else:
+                        dt = datetime.strptime(aired_at_str, "%Y-%m-%d %H:%M:%S")
+                    
+                    if dt > viewed_month_end:
+                        if next_event_date is None or dt < next_event_date:
+                            next_event_date = dt
+                except ValueError:
+                    continue
+            
+            if next_event_date:
+                def ask_jump():
+                    self.run_worker(self._prompt_jump_to_date(next_event_date))
+                self.set_timer(0.5, ask_jump)
+
         else:
             target_day_num = None
-            today = datetime.now()
             
             for date_str, items in grouped_items.items():
                 day_num = items[0]["_dt"].day
@@ -1518,34 +1588,51 @@ class RivenTUI(App):
                         pass
                 self.set_timer(0.1, jump_to_day)
 
+    def _change_month(self, dt: datetime, months: int) -> datetime:
+        """Safely change month, clamping day to valid range."""
+        month = dt.month - 1 + months
+        year = dt.year + month // 12
+        month = month % 12 + 1
+        day = min(dt.day, calendar.monthrange(year, month)[1])
+        return dt.replace(year=year, month=month, day=day)
+
+    async def _prompt_jump_to_date(self, target_date: datetime) -> None:
+        month_name = calendar.month_name[target_date.month]
+        date_str = target_date.strftime("%B %d, %Y")
+        
+        confirmed = await self.push_screen_wait(ConfirmationScreen(
+            "Next Event Found",
+            f"There are no more events this month.\n\nJump to the next upcoming event on [bold]{date_str}[/]?",
+            confirm_label=f"Go to {month_name}",
+            variant="primary"
+        ))
+        
+        if confirmed:
+            self.current_calendar_date = target_date
+            await self.show_calendar()
+
     @on(Button.Pressed, "#btn-prev-year-sidebar")
-    async def on_prev_year_sidebar(self):
-        self.current_calendar_date = self.current_calendar_date.replace(year=self.current_calendar_date.year - 1)
+    @on(Button.Pressed, "#btn-prev-year-main")
+    async def on_prev_year(self):
+        self.current_calendar_date = self._change_month(self.current_calendar_date, -12)
         await self.show_calendar()
 
     @on(Button.Pressed, "#btn-next-year-sidebar")
-    async def on_next_year_sidebar(self):
-        self.current_calendar_date = self.current_calendar_date.replace(year=self.current_calendar_date.year + 1)
+    @on(Button.Pressed, "#btn-next-year-main")
+    async def on_next_year(self):
+        self.current_calendar_date = self._change_month(self.current_calendar_date, 12)
         await self.show_calendar()
 
     @on(Button.Pressed, "#btn-prev-month-sidebar")
-    async def on_prev_month_sidebar(self):
-        new_month = self.current_calendar_date.month - 1
-        new_year = self.current_calendar_date.year
-        if new_month < 1:
-            new_month = 12
-            new_year -= 1
-        self.current_calendar_date = self.current_calendar_date.replace(year=new_year, month=new_month)
+    @on(Button.Pressed, "#btn-prev-month-main")
+    async def on_prev_month(self):
+        self.current_calendar_date = self._change_month(self.current_calendar_date, -1)
         await self.show_calendar()
 
     @on(Button.Pressed, "#btn-next-month-sidebar")
-    async def on_next_month_sidebar(self):
-        new_month = self.current_calendar_date.month + 1
-        new_year = self.current_calendar_date.year
-        if new_month > 12:
-            new_month = 1
-            new_year += 1
-        self.current_calendar_date = self.current_calendar_date.replace(year=new_year, month=new_month)
+    @on(Button.Pressed, "#btn-next-month-main")
+    async def on_next_month(self):
+        self.current_calendar_date = self._change_month(self.current_calendar_date, 1)
         await self.show_calendar()
 
     @on(Button.Pressed, "#btn-refresh-logs")
@@ -1599,10 +1686,24 @@ class RivenTUI(App):
         await main_content.display_json(data)
 
     @on(Button.Pressed, "#btn-delete")
+    def on_delete_click(self) -> None:
+        self.run_worker(self.handle_delete())
+
     async def handle_delete(self):
         main_content = self.query_one(MainContent)
         item_id = main_content.item_details.get("id")
         if not item_id: return
+        title = main_content.item_details.get("title") or "Unknown Item"
+
+        confirmed = await self.push_screen_wait(ConfirmationScreen(
+            "Delete Item",
+            f"Are you sure you want to delete [bold]{title}[/] from your library?",
+            confirm_label="Yes, Delete",
+            variant="error"
+        ))
+        
+        if not confirmed: return
+
         success, response = await self.api.delete_item(item_id, self.settings.get("riven_key"))
         if success:
             self.notify(f"Item deleted.", severity="information")
@@ -1612,10 +1713,24 @@ class RivenTUI(App):
             self.notify("Failed to delete item.", severity="error")
 
     @on(Button.Pressed, "#btn-reset")
+    def on_reset_click(self) -> None:
+        self.run_worker(self.handle_reset())
+
     async def handle_reset(self):
         main_content = self.query_one(MainContent)
         item_id = main_content.item_details.get("id")
         if not item_id: return
+        title = main_content.item_details.get("title") or "Unknown Item"
+
+        confirmed = await self.push_screen_wait(ConfirmationScreen(
+            "Reset Item",
+            f"Are you sure you want to reset [bold]{title}[/]?\nThis will restart the download/scrape process.",
+            confirm_label="Yes, Reset",
+            variant="warning"
+        ))
+        
+        if not confirmed: return
+
         success, response = await self.api.reset_item(item_id, self.settings.get("riven_key"))
         if success:
             self.notify("Item reset successfully.", severity="information")
@@ -1624,10 +1739,24 @@ class RivenTUI(App):
             self.notify("Failed to reset item.", severity="error")
 
     @on(Button.Pressed, "#btn-retry")
+    def on_retry_click(self) -> None:
+        self.run_worker(self.handle_retry())
+
     async def handle_retry(self):
         main_content = self.query_one(MainContent)
         item_id = main_content.item_details.get("id")
         if not item_id: return
+        title = main_content.item_details.get("title") or "Unknown Item"
+
+        confirmed = await self.push_screen_wait(ConfirmationScreen(
+            "Retry Item",
+            f"Are you sure you want to retry [bold]{title}[/]?\nThis will attempt to re-process the item.",
+            confirm_label="Yes, Retry",
+            variant="primary"
+        ))
+        
+        if not confirmed: return
+
         success, response = await self.api.retry_item(item_id, self.settings.get("riven_key"))
         if success:
             self.notify("Item sent for retry.", severity="information")
@@ -1803,6 +1932,88 @@ class RivenTUI(App):
         else:
             self.notify(f"Failed to add '{title}': {response}", severity="error")
 
+    @on(Button.Pressed, "#btn-select-all-matches")
+    def on_select_all_matches_click(self) -> None:
+        self.run_worker(self.perform_select_all_matches())
+
+    async def perform_select_all_matches(self) -> None:
+        # If no filters set, default to all items
+        filters = self.last_library_filters or {}
+        
+        # 1. Get total count first to confirm
+        riven_key = self.settings.get("riven_key")
+        resp, err = await self.api.get_items(
+            riven_key, 
+            limit=1, 
+            sort=filters.get("sort"), 
+            item_type=filters.get("item_type"), 
+            search=filters.get("search"), 
+            states=filters.get("states")
+        )
+        
+        if not resp:
+            self.notify(f"Error fetching count: {err}", severity="error")
+            return
+            
+        total_items = resp.get("total_items", 0)
+        if total_items == 0:
+            self.notify("No items found to select.", severity="warning")
+            return
+
+        # 2. Confirm if it's a large operation
+        confirmed = await self.push_screen_wait(ConfirmationScreen(
+            "Select All Matches",
+            f"This will fetch IDs for all [bold]{total_items}[/] matching items across all pages.\n\nProceed?",
+            confirm_label="Select All",
+            variant="primary"
+        ))
+        
+        if not confirmed:
+            return
+
+        # 3. Fetch all pages
+        await self.start_spinner(f"Fetching {total_items} items...")
+        
+        limit = 500 # Use efficient batch size
+        total_pages = (total_items + limit - 1) // limit
+        count_added = 0
+        
+        for page in range(1, total_pages + 1):
+            # Update spinner message periodically
+            if page % 2 == 0:
+                await self.start_spinner(f"Fetching page {page}/{total_pages}...")
+                
+            p_resp, _ = await self.app.api.get_items(
+                riven_key, 
+                limit=limit, 
+                page=page,
+                sort=filters.get("sort"), 
+                item_type=filters.get("item_type"), 
+                search=filters.get("search"), 
+                states=filters.get("states")
+            )
+            
+            if p_resp and "items" in p_resp:
+                for item in p_resp["items"]:
+                    tid = str(item.get("id"))
+                    title = item.get("title") or item.get("name") or "Unknown"
+                    if tid not in self.library_selection:
+                        self.library_selection[tid] = title
+                        count_added += 1
+        
+        self.stop_spinner()
+        self.notify(f"Added {count_added} items to selection.", severity="success")
+        
+        # Update sidebar
+        try:
+            self.query_one(Sidebar).update_selection_count(len(self.library_selection))
+        except:
+            pass
+            
+        # Refresh current view to show checkmarks
+        if self.last_library_filters:
+            await self.show_library_items(**self.last_library_filters)
+
     @on(Button.Pressed, "#btn-clear-selection")
     async def on_clear_selection(self):
         if not self.library_selection:
@@ -1812,6 +2023,11 @@ class RivenTUI(App):
         count = len(self.library_selection)
         self.library_selection.clear()
         self.notify(f"Cleared selection ({count} items).", severity="success")
+        
+        try:
+            self.query_one(Sidebar).update_selection_count(0)
+        except:
+            pass
         
         # Refresh current library view to update checkboxes
         if self.last_library_filters:
@@ -1883,6 +2099,10 @@ class RivenTUI(App):
     @on(Button.Pressed, "#btn-advanced-toggle")
     def on_advanced_toggle(self):
         self.query_one(Sidebar).toggle_advanced()
+
+    @on(ApplyFilters)
+    async def on_apply_filters_msg(self):
+        await self.on_apply_filters()
 
     @on(Button.Pressed, "#btn-apply-filters")
     async def on_apply_filters(self):

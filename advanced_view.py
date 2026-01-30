@@ -2,14 +2,14 @@ from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static, Label, Button, Input, Log, ListView, ListItem
 from textual import on
-from typing import List
+from typing import List, Dict
 import asyncio
 from modals import ConfirmationScreen
 
 from textual.reactive import reactive
 
 class AdvancedView(Vertical):
-    matched_ids: List[str] = []
+    matched_items: Dict[str, str] = {} # ID -> Title
     show_mdblist = reactive(False)
     show_import_export = reactive(False)
 
@@ -34,22 +34,22 @@ class AdvancedView(Vertical):
                     yield Button("Mass Reset", id="btn-adv-reset", variant="warning", disabled=True)
                     yield Button("Mass Retry", id="btn-adv-retry", variant="primary", disabled=True)
 
-            # 2. Import/Export Section
-            yield Static("Import/Export Library ▶", id="import-export-header", classes="advanced-header-toggle")
+            # 2. Backup/Restore Section
+            yield Static("Backup/Restore Library ▶", id="import-export-header", classes="advanced-header-toggle")
             
             with Vertical(id="import-export-area", classes="bulk-area-panel"):
                 with Horizontal(classes="advanced-row"):
-                    yield Button("Export Library", id="btn-export-lib", variant="primary")
-                    yield Button("Import Library", id="btn-import-lib", variant="success")
+                    yield Button("Backup Library", id="btn-export-lib", variant="primary")
+                    yield Button("Restore Library", id="btn-import-lib", variant="success")
                 
                 yield Static("", id="export-status", classes="advanced-status")
                 yield Static("") # Blank line spacer
                 
                 yield Label("Usage Notes:", classes="advanced-sub-label")
                 yield Label(
-                    "• [bold]Export[/]: Saves IDs to [cyan]riven_export.json[/]\n"
+                    "• [bold]Backup[/]: Saves IDs to [cyan]riven_export.json[/]\n"
                     "• [bold]Migration[/]: Move file to new instance folder\n"
-                    "• [bold]Import[/]: Requests all items from file",
+                    "• [bold]Restore[/]: Requests all items from file",
                     classes="advanced-hint"
                 )
 
@@ -69,9 +69,9 @@ class AdvancedView(Vertical):
 
         # 1. Ask for confirmation
         confirmed = await self.app.push_screen_wait(ConfirmationScreen(
-            "Import Library",
-            f"Are you sure you want to import items from [cyan]{file_path}[/]?\n\nExisting items will be automatically skipped.",
-            confirm_label="Yes, Import",
+            "Restore Library",
+            f"Are you sure you want to restore items from [cyan]{file_path}[/]?\n\nExisting items will be automatically skipped.",
+            confirm_label="Yes, Restore",
             variant="success"
         ))
         
@@ -164,7 +164,7 @@ class AdvancedView(Vertical):
         self._update_panel("#mdblist-bulk-area", "#mdblist-header", "MDBList Bulk Manager", show)
 
     def watch_show_import_export(self, show: bool) -> None:
-        self._update_panel("#import-export-area", "#import-export-header", "Import/Export Library", show)
+        self._update_panel("#import-export-area", "#import-export-header", "Backup/Restore Library", show)
 
     def _update_panel(self, area_id: str, header_id: str, label: str, show: bool) -> None:
         try:
@@ -276,8 +276,7 @@ class AdvancedView(Vertical):
         # 2. Surgical Probing - Query Riven for each specific ID in parallel
         status.update(f"[yellow]Surgically probing Riven for {len(all_mdb_items)} items...[/]")
         riven_key = self.app.settings.get("riven_key")
-        self.matched_ids = []
-        matched_titles = []
+        self.matched_items = {}
         
         # Concurrency control
         semaphore = asyncio.Semaphore(10)
@@ -297,7 +296,7 @@ class AdvancedView(Vertical):
             if not tvdb_id: return None
             async with semaphore:
                 # Use the direct ID lookup endpoint for TVDB as proven in your curl
-                item = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key)
+                item = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key, silent=True)
                 return item
             return None
 
@@ -312,51 +311,91 @@ class AdvancedView(Vertical):
         results = await asyncio.gather(*tasks)
 
         # 3. Process Results
-        unique_matches = set()
         for item in results:
-            if item and item.get("id") not in unique_matches:
-                self.matched_ids.append(str(item["id"]))
-                unique_matches.add(item["id"])
-                matched_titles.append(item.get("title", "Unknown"))
+            if item:
+                i_id = str(item["id"])
+                i_title = item.get("title", "Unknown")
+                if i_id not in self.matched_items:
+                    self.matched_items[i_id] = i_title
 
         # 4. Update UI
-        count = len(self.matched_ids)
+        count = len(self.matched_items)
         status.update(f"[green]Scan Complete: Found {count} matches in your library.[/]")
         
-        for title in sorted(matched_titles):
-            matched_list.append(ListItem(Label(title)))
+        # Sort by title for display
+        sorted_items = sorted(self.matched_items.items(), key=lambda x: x[1])
+        for i_id, i_title in sorted_items:
+            matched_list.append(ListItem(Label(i_title)))
 
         has_matches = count > 0
         self.query_one("#btn-adv-delete", Button).disabled = not has_matches
         self.query_one("#btn-adv-reset", Button).disabled = not has_matches
         self.query_one("#btn-adv-retry", Button).disabled = not has_matches
 
-    async def run_action(self, action: str):
-        if not self.matched_ids: return
+    @on(Button.Pressed, "#btn-adv-delete")
+    def on_delete_click(self) -> None: self.run_worker(self.run_action("remove", "Delete"))
+
+    @on(Button.Pressed, "#btn-adv-reset")
+    def on_reset_click(self) -> None: self.run_worker(self.run_action("reset", "Reset"))
+
+    @on(Button.Pressed, "#btn-adv-retry")
+    def on_retry_click(self) -> None: self.run_worker(self.run_action("retry", "Retry"))
+
+    async def run_action(self, action: str, display_name: str):
+        if not self.matched_items: return
         
         status = self.query_one("#adv-status-line", Static)
-        status.update(f"[yellow]Sending {len(self.matched_ids)} IDs to Riven...[/]")
-        
-        self.app.log_message(f"Advanced: Executing {action} on IDs: {self.matched_ids}")
-        
+        all_ids = list(self.matched_items.keys())
+        count = len(all_ids)
+
+        # 1. Confirmation Modal
+        variant = "primary"
+        if action == "remove": variant = "error"
+        elif action == "reset": variant = "warning"
+
+        confirmed = await self.app.push_screen_wait(ConfirmationScreen(
+            f"Mass {display_name}",
+            f"Are you sure you want to {display_name.lower()} [bold]{count}[/] matched items from your library?",
+            confirm_label=f"Yes, {display_name} All",
+            variant=variant
+        ))
+
+        if not confirmed:
+            return
+
+        # 2. Batched Execution
+        status.update(f"[yellow]Executing {display_name} on {count} items...[/]")
         riven_key = self.app.settings.get("riven_key")
-        success, msg = await self.app.api.bulk_action(action, self.matched_ids, riven_key)
         
-        if success:
-            status.update(f"[bold green]Success: Bulk {action} completed for {len(self.matched_ids)} items.[/]")
-            self.matched_ids = []
+        batch_size = 50
+        success_count = 0
+        fail_count = 0
+
+        for i in range(0, count, batch_size):
+            batch = all_ids[i:i + batch_size]
+            status.update(f"[yellow]{display_name} Progress: {i}/{count}...[/]")
+            
+            success, msg = await self.app.api.bulk_action(action, batch, riven_key)
+            if success:
+                success_count += len(batch)
+            else:
+                fail_count += len(batch)
+                # Enrich error message with titles if IDs are present
+                error_msg = str(msg)
+                for item_id in batch:
+                    if item_id in error_msg:
+                        title = self.matched_items.get(item_id, "Unknown")
+                        error_msg = error_msg.replace(item_id, f"{item_id} - {title}")
+                
+                self.app.log_message(f"Mass {display_name} Error: {error_msg}")
+
+        # 3. Final Report & Cleanup
+        if fail_count == 0:
+            status.update(f"[bold green]Success: {display_name} completed for all {count} items.[/]")
+            self.matched_items = {}
             self.query_one("#btn-adv-delete", Button).disabled = True
             self.query_one("#btn-adv-reset", Button).disabled = True
             self.query_one("#btn-adv-retry", Button).disabled = True
             self.query_one("#adv-matched-list", ListView).clear()
         else:
-            status.update(f"[red]Action failed: {msg}[/]")
-
-    @on(Button.Pressed, "#btn-adv-delete")
-    async def on_delete(self): await self.run_action("remove")
-
-    @on(Button.Pressed, "#btn-adv-reset")
-    async def on_reset(self): await self.run_action("reset")
-
-    @on(Button.Pressed, "#btn-adv-retry")
-    async def on_retry(self): await self.run_action("retry")
+            status.update(f"[yellow]Finished with issues: {success_count} succeeded, {fail_count} failed.[/]")

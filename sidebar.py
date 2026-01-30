@@ -8,6 +8,9 @@ import calendar
 from search import SearchArea
 from messages import PageChanged
 
+class ApplyFilters(Message):
+    pass
+
 class FilterPill(Static):
     class Changed(Message):
         def __init__(self, filter_type: str, value: bool) -> None:
@@ -41,6 +44,10 @@ class TypePill(Static):
         self.set_class(self.value, "-active")
 
 class Sidebar(Container):
+    @on(Input.Submitted, "#lib-filter-search")
+    def on_search_submitted(self):
+        self.post_message(ApplyFilters())
+
     def compose(self) -> ComposeResult:
         yield SearchArea(id="sidebar-search")
         yield Static("", id="sidebar-title")
@@ -87,6 +94,8 @@ class Sidebar(Container):
                 yield Label("Limit:")
                 yield Select([("5", 5), ("10", 10), ("20", 20), ("50", 50)], prompt="Limit", id="lib-filter-limit", allow_blank=False, value=20)
 
+            yield Static("0 of 0 Selected", id="sidebar-total-count")
+
             with Horizontal(classes="separator-row"):
                 yield Button("<<", id="btn-prev-page", classes="blue-separator")
                 yield Static("1 of 1", id="sidebar-page-label", classes="red-separator")
@@ -94,6 +103,7 @@ class Sidebar(Container):
 
             with Horizontal(id="sidebar-actions-row"):
                 yield Button("Apply\nFilters", id="btn-apply-filters", classes="sidebar-action-btn")
+                yield Button("Select\nAll", id="btn-select-all-matches", classes="sidebar-action-btn")
                 yield Button("Clear\nSelection", id="btn-clear-selection", classes="sidebar-action-btn")
                 yield Button("Advanced\nSettings", id="btn-advanced-toggle", classes="sidebar-action-btn")
 
@@ -157,7 +167,7 @@ class Sidebar(Container):
                     week_widgets.append(Button(str(day), id=f"btn-cal-day-{day}", classes=classes))
             await container.mount(Horizontal(*week_widgets, classes="calendar-grid-row"))
 
-    def update_pagination(self, page: int, total_pages: int) -> None:
+    def update_pagination(self, page: int, total_pages: int, total_items: int = 0, selected_count: int = 0) -> None:
         try:
             prev_btn = self.query_one("#btn-prev-page", Button)
             prev_btn.disabled = page <= 1
@@ -172,6 +182,25 @@ class Sidebar(Container):
 
         try:
             self.query_one("#sidebar-page-label", Static).update(f"[bold]{page}[/] of [bold]{total_pages}[/]")
+        except Exception:
+            pass
+            
+        self.update_selection_count(selected_count, total_items)
+
+    def update_selection_count(self, selected: int, total: int = None) -> None:
+        try:
+            label = self.query_one("#sidebar-total-count", Static)
+            # If total is not provided, try to parse it from current label or keep existing
+            if total is None:
+                current_text = label.renderable if hasattr(label, 'renderable') else ""
+                # This is a bit brittle, so we rely on the app passing total usually.
+                # For now, if total is missing, we might just show selected.
+                # But better: store total in the class.
+                total = getattr(self, "_last_total_items", 0)
+            else:
+                self._last_total_items = total
+            
+            label.update(f"[bold #FFFFFF]{selected}[/] of {total} Selected")
         except Exception:
             pass
 

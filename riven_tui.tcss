@@ -309,7 +309,7 @@ Button {
     margin-top: 1;
 }
 
-#sidebar-selection-count {
+#sidebar-total-count {
     width: 100%;
     text-align: center;
     background: transparent;
@@ -317,7 +317,7 @@ Button {
     text-style: bold italic;
     margin-top: 0;
     padding: 1 0;
-    border-top: dashed #3D5A80;
+    border: none;
 }
 
 #lib-filter-limit {
@@ -383,6 +383,10 @@ Button {
 }
 
 #btn-apply-filters {
+    border-right: solid #141424;
+}
+
+#btn-select-all-matches {
     border-right: solid #141424;
 }
 

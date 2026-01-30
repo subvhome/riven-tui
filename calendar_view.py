@@ -65,8 +65,8 @@ class CalendarHeader(Horizontal):
         self.month = month
 
     def compose(self) -> ComposeResult:
-        yield Button("<<", id="btn-prev-year-sidebar")
-        yield Button("<", id="btn-prev-month-sidebar")
+        yield Button("<<", id="btn-prev-year-main")
+        yield Button("<", id="btn-prev-month-main")
         yield Label(f"{calendar.month_name[self.month]} {self.year}", id="calendar-month-label")
-        yield Button(">", id="btn-next-month-sidebar")
-        yield Button(">>", id="btn-next-year-sidebar")
+        yield Button(">", id="btn-next-month-main")
+        yield Button(">>", id="btn-next-year-main")
