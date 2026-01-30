@@ -1,0 +1,11 @@
+/* Blooming Romance - Burgundy & Purple */
+$background: #1A0B10;
+$surface: #2D141B;
+$panel: #3D1C26;
+$foreground: #FCE7F3;
+$primary: #9D174D;
+$secondary: #BE185D;
+$accent: #FBCFE8;
+$success: #166534;
+$warning: #92400E;
+$error: #991B1B;

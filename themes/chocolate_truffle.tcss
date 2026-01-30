@@ -1,0 +1,11 @@
+/* Chocolate Truffle - Brown & Cream */
+$background: #2D1B14;
+$surface: #3D261C;
+$panel: #4D3225;
+$foreground: #F5EBE0;
+$primary: #A67C52;
+$secondary: #D4A373;
+$accent: #CCD5AE;
+$success: #606C38;
+$warning: #BC6C25;
+$error: #A44A3F;

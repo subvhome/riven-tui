@@ -45,20 +45,23 @@ Button {
     min-width: 12;
     padding: 0 2;
     margin: 0;
-    color: #777;
+    color: $foreground; /* Use theme color instead of dim grey */
+    opacity: 0.7; /* Use opacity for inactive tabs instead of hardcoded grey */
     content-align: center middle;
     background: transparent;
 }
 
 .menu-button:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #AAA;
+    background: rgba(0, 0, 0, 0.05); /* Darker hover for light themes */
+    color: $foreground;
+    opacity: 1.0;
 }
 
 .menu-button.-active {
     background: $background;
-    color: #FFF;
+    color: $foreground;
     text-style: bold;
+    opacity: 1.0;
 }
 
 #header-title {
@@ -689,11 +692,13 @@ ListItem {
 }
 
 ListItem:even {
-    background: #1C1C2E;
+    background: $background; /* Cycle back to primary background for alternating rows */
+    opacity: 0.9;
 }
 
 ListItem:hover {
     background: $primary !important;
+    color: $background; /* Ensure text is visible on hover */
 }
 
 .sidebar-item-layout {
@@ -714,7 +719,7 @@ ListItem:hover {
 }
 
 .search-item-meta {
-    color: #709fdc;
+    color: $secondary;
     height: 1;
 }
 

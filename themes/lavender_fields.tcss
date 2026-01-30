@@ -1,0 +1,11 @@
+/* Lavender Fields - Muted Purple & Cream */
+$background: #FAF5FF;
+$surface: #F3E8FF;
+$panel: #E9D5FF;
+$foreground: #4C1D95;
+$primary: #7C3AED;
+$secondary: #8B5CF6;
+$accent: #DDD6FE;
+$success: #059669;
+$warning: #D97706;
+$error: #DC2626;

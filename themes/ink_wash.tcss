@@ -1,0 +1,11 @@
+/* Ink Wash - Charcoal & Ivory */
+$background: #121212;
+$surface: #1E1E1E;
+$panel: #2C2C2C;
+$foreground: #F5F5F5;
+$primary: #757575;
+$secondary: #9E9E9E;
+$accent: #BDBDBD;
+$success: #4CAF50;
+$warning: #FFC107;
+$error: #F44336;

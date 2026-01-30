@@ -1,0 +1,11 @@
+/* Stormy Morning - Blue-Gray */
+$background: #24292E;
+$surface: #2F363D;
+$panel: #444D56;
+$foreground: #E1E4E8;
+$primary: #0366D6;
+$secondary: #6F42C1;
+$accent: #F9826C;
+$success: #28A745;
+$warning: #FFD33D;
+$error: #D73A49;

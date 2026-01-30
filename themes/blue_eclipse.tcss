@@ -1,0 +1,11 @@
+/* Blue Eclipse - Midnight Blue */
+$background: #0B0E14;
+$surface: #151921;
+$panel: #1C232D;
+$foreground: #CBD5E1;
+$primary: #38BDF8;
+$secondary: #818CF8;
+$accent: #F472B6;
+$success: #10B981;
+$warning: #F59E0B;
+$error: #EF4444;

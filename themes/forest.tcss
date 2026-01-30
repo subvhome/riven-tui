@@ -1,0 +1,11 @@
+/* Forest - Earthy & Natural */
+$background: #1A1C1A;
+$surface: #242924;
+$panel: #2F362F;
+$foreground: #E0E7E0;
+$primary: #4E6E4E;
+$secondary: #8A9A5B;
+$accent: #D4AF37;
+$success: #6B8E23;
+$warning: #CD853F;
+$error: #8B4513;

@@ -1,0 +1,11 @@
+/* Burnt Sienna - Terracotta & Beige */
+$background: #2D1810;
+$surface: #3D2218;
+$panel: #4D2D22;
+$foreground: #F5E6E0;
+$primary: #E2725B;
+$secondary: #D2691E;
+$accent: #DEB887;
+$success: #8FBC8F;
+$warning: #CD853F;
+$error: #B22222;

@@ -1,0 +1,11 @@
+/* Apple Light - macOS Inspired */
+$background: #F2F2F7;
+$surface: #FFFFFF;
+$panel: #E5E5EA;
+$foreground: #1C1C1E;
+$primary: #007AFF;
+$secondary: #5856D6;
+$accent: #FF9500;
+$success: #34C759;
+$warning: #FFCC00;
+$error: #FF3B30;

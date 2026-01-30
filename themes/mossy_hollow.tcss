@@ -1,0 +1,11 @@
+/* Mossy Hollow - Olive Green */
+$background: #1B1F13;
+$surface: #2D331D;
+$panel: #3E442B;
+$foreground: #ECF3DC;
+$primary: #6B8E23;
+$secondary: #8A9A5B;
+$accent: #D4AF37;
+$success: #9ACD32;
+$warning: #CD853F;
+$error: #8B4513;

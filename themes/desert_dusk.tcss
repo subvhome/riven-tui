@@ -1,0 +1,11 @@
+/* Desert Dusk - Cognac & Orange */
+$background: #1F130E;
+$surface: #2F1C15;
+$panel: #3D261C;
+$foreground: #FFEDD5;
+$primary: #C2410C;
+$secondary: #EA580C;
+$accent: #FED7AA;
+$success: #15803D;
+$warning: #B45309;
+$error: #B91C1C;

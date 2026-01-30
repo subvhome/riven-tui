@@ -1,0 +1,11 @@
+/* Wisteria Bloom - Lavender & Violet */
+$background: #1A1625;
+$surface: #2D2438;
+$panel: #3D2F4D;
+$foreground: #F3E8FF;
+$primary: #9D7BFF;
+$secondary: #C084FC;
+$accent: #E9D5FF;
+$success: #4ADE80;
+$warning: #FBBF24;
+$error: #F87171;

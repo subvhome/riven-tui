@@ -1,0 +1,11 @@
+/* Windows Dark - Fluent Inspired */
+$background: #202020;
+$surface: #2B2B2B;
+$panel: #323232;
+$foreground: #FFFFFF;
+$primary: #0078D4;
+$secondary: #8764B8;
+$accent: #60CDFF;
+$success: #107C10;
+$warning: #F9D616;
+$error: #E81123;
