@@ -1,0 +1,11 @@
+/* MS-DOS Classic - High Contrast Blue & Grey */
+$background: #0000AA;
+$surface: #000000;
+$panel: #AAAAAA;
+$foreground: #FFFFFF;
+$primary: #5555FF;
+$secondary: #FFFFFF;
+$accent: #FFFF55;
+$success: #55FF55;
+$warning: #FF5555;
+$error: #FF5555;

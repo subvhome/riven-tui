@@ -267,7 +267,8 @@ class RivenTUI(App):
                     if line.startswith("$") and ":" in line:
                         key, val = line.split(":", 1)
                         key = key.strip("$").strip()
-                        val = val.strip().strip(";")
+                        # Remove comments (/* ... */) and semicolons
+                        val = val.split("/*")[0].strip().strip(";")
                         if key in colors:
                             colors[key] = val
         except Exception:
@@ -332,9 +333,13 @@ class RivenTUI(App):
         import json
         
         try:
-            # 1. Get all .tcss files in themes/
-            files = [f.replace(".tcss", "") for f in os.listdir("themes") if f.endswith(".tcss")]
-            if not files: return
+            # 1. Get all .tcss files in themes/ and SORT them
+            files = sorted([f.replace(".tcss", "") for f in os.listdir("themes") if f.endswith(".tcss")])
+            if not files:
+                self.log_message("Theme: No theme files found in themes/")
+                return
+            
+            self.log_message(f"Theme: Found {len(files)} themes: {files}")
             
             # 2. Determine current and next index
             current_theme = self.settings.get("theme", "default")

@@ -1,0 +1,11 @@
+/* Windows 3.11 - Hot Dog Stand / Legacy */
+$background: #008080;
+$surface: #C0C0C0;
+$panel: #FFFFFF;
+$foreground: #000000;
+$primary: #000080;
+$secondary: #808080;
+$accent: #FF0000;
+$success: #008000;
+$warning: #FFFF00;
+$error: #FF0000;
