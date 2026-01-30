@@ -370,7 +370,9 @@ class RivenTUI(App):
 
         if not self.logger.handlers:
             # File Handler
-            file_handler = RotatingFileHandler('riven.log', maxBytes=5*1024*1024, backupCount=3)
+            import os
+            os.makedirs('logs', exist_ok=True)
+            file_handler = RotatingFileHandler('logs/riven.log', maxBytes=5*1024*1024, backupCount=3)
             formatter = RedactingFormatter(
                 '%(asctime)s - [%(name)s] - %(levelname)s - %(message)s',
                 patterns=redact_patterns

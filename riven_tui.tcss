@@ -1317,14 +1317,39 @@ ListItem:focus .search-item-meta {
     text-style: bold;
     color: #BE95C4;
     margin-bottom: 0;
+    text-align: center;
+    background: #141424;
 }
 
-.advanced-scroll-box {
-    height: 15; /* Increased slightly for better visibility */
-    border: solid #3D5A80;
+#adv-results-row {
+    layout: horizontal;
+    height: 15;
+    width: 100%;
     margin-bottom: 1;
-    padding: 0 1;
 }
+
+.advanced-column {
+    width: 1fr;
+    height: 100%;
+    border: solid #3D5A80;
+    margin: 0 1;
+    background: #0F0F1A;
+}
+
+.advanced-column ListView {
+    background: transparent;
+    height: 1fr;
+}
+
+.advanced-column ListItem {
+    height: 1;
+    padding: 0 1;
+    background: transparent;
+}
+
+.column-header-root { border-top: thick #6A994E; }
+.column-header-season { border-top: thick #E57373; }
+.column-header-episode { border-top: thick #E57373; }
 
 #adv-matched-list {
     background: transparent;

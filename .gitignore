@@ -6,6 +6,7 @@ settings_structure.md
 
 # Logs
 *.log
+logs/
 
 # Python
 __pycache__/
@@ -34,7 +35,6 @@ Thumbs.db
 cookies.txt
 login_response.json
 test_scrape.sh
-riven_export.json
 
 #backups
 riven_export.json

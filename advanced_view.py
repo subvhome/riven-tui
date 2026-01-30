@@ -9,7 +9,7 @@ from modals import ConfirmationScreen
 from textual.reactive import reactive
 
 class AdvancedView(Vertical):
-    matched_items: Dict[str, str] = {} # ID -> Title
+    matched_items: Dict[str, dict] = {} # ID -> Full Item Data
     show_mdblist = reactive(False)
     show_import_export = reactive(False)
 
@@ -25,9 +25,16 @@ class AdvancedView(Vertical):
 
                 yield Static("", id="adv-status-line", classes="advanced-status")
 
-                with Vertical(id="adv-matched-container", classes="advanced-scroll-box"):
-                    yield Label("MATCHED TITLES", classes="advanced-sub-label")
-                    yield ListView(id="adv-matched-list")
+                with Horizontal(id="adv-results-row"):
+                    with Vertical(classes="advanced-column column-header-root"):
+                        yield Label("ROOT (ACTONABLE)", classes="advanced-sub-label")
+                        yield ListView(id="adv-list-root")
+                    with Vertical(classes="advanced-column column-header-season"):
+                        yield Label("SEASONS", classes="advanced-sub-label")
+                        yield ListView(id="adv-list-season")
+                    with Vertical(classes="advanced-column column-header-episode"):
+                        yield Label("EPISODES", classes="advanced-sub-label")
+                        yield ListView(id="adv-list-episode")
 
                 with Horizontal(classes="advanced-row", id="adv-actions-row"):
                     yield Button("Mass Delete", id="btn-adv-delete", variant="error", disabled=True)
@@ -256,81 +263,77 @@ class AdvancedView(Vertical):
         status.update("[yellow]Fetching list from Mdblist...[/]")
         self.app.log_message(f"Advanced: Starting scan for {val}")
         
-        matched_list = self.query_one("#adv-matched-list", ListView)
-        matched_list.clear()
+        # Clear all 3 lists
+        self.query_one("#adv-list-root", ListView).clear()
+        self.query_one("#adv-list-season", ListView).clear()
+        self.query_one("#adv-list-episode", ListView).clear()
 
         # 1. Fetch Mdblist
         mdb_items, mdb_err = await self.app.api.get_mdblist_items(val)
         if mdb_err:
             status.update(f"[red]Mdblist Error: {mdb_err}[/]")
-            self.app.log_message(f"Advanced: Mdblist Error: {mdb_err}")
             return
 
         all_mdb_items = mdb_items.get("movies", []) + mdb_items.get("shows", [])
-        self.app.log_message(f"Advanced: Mdblist returned {len(all_mdb_items)} items.")
-        
         if not all_mdb_items:
             status.update("[yellow]Mdblist is empty or not yet populated.[/]")
             return
 
-        # 2. Surgical Probing - Query Riven for each specific ID in parallel
+        # 2. Surgical Probing
         status.update(f"[yellow]Surgically probing Riven for {len(all_mdb_items)} items...[/]")
         riven_key = self.app.settings.get("riven_key")
         self.matched_items = {}
         
-        # Concurrency control
         semaphore = asyncio.Semaphore(10)
 
         async def probe_movie(m):
             imdb_id = m.get("imdb_id")
             if not imdb_id: return None
             async with semaphore:
-                # Use the search endpoint for IMDB IDs as proven in your curl
                 resp, err = await self.app.api.get_items(riven_key, search=imdb_id, limit=1)
-                if resp and resp.get("items"):
-                    return resp["items"][0]
+                if resp and resp.get("items"): return resp["items"][0]
             return None
 
         async def probe_show(s):
             tvdb_id = s.get("tvdb_id")
             if not tvdb_id: return None
             async with semaphore:
-                # Use the direct ID lookup endpoint for TVDB as proven in your curl
                 item = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key, silent=True)
                 return item
             return None
 
-        # Create specific tasks for movies and shows
-        tasks = []
-        for m in mdb_items.get("movies", []):
-            tasks.append(probe_movie(m))
-        for s in mdb_items.get("shows", []):
-            tasks.append(probe_show(s))
-
-        # Execute all probes in parallel
+        tasks = [probe_movie(m) for m in mdb_items.get("movies", [])]
+        tasks += [probe_show(s) for s in mdb_items.get("shows", [])]
         results = await asyncio.gather(*tasks)
 
-        # 3. Process Results
+        # 3. Process & Categorize
+        counts = {"root": 0, "season": 0, "episode": 0}
         for item in results:
             if item:
                 i_id = str(item["id"])
-                i_title = item.get("title", "Unknown")
-                if i_id not in self.matched_items:
-                    self.matched_items[i_id] = i_title
+                i_type = item.get("type", "unknown")
+                self.matched_items[i_id] = item
+                
+                # Categorize
+                target_list_id = None
+                if i_type in ["movie", "show"]:
+                    target_list_id = "#adv-list-root"
+                    counts["root"] += 1
+                elif i_type == "season":
+                    target_list_id = "#adv-list-season"
+                    counts["season"] += 1
+                elif i_type == "episode":
+                    target_list_id = "#adv-list-episode"
+                    counts["episode"] += 1
+                
+                if target_list_id:
+                    self.query_one(target_list_id, ListView).append(ListItem(Label(item.get("title", "Unknown"))))
 
-        # 4. Update UI
-        count = len(self.matched_items)
-        status.update(f"[green]Scan Complete: Found {count} matches in your library.[/]")
-        
-        # Sort by title for display
-        sorted_items = sorted(self.matched_items.items(), key=lambda x: x[1])
-        for i_id, i_title in sorted_items:
-            matched_list.append(ListItem(Label(i_title)))
-
-        has_matches = count > 0
-        self.query_one("#btn-adv-delete", Button).disabled = not has_matches
-        self.query_one("#btn-adv-reset", Button).disabled = not has_matches
-        self.query_one("#btn-adv-retry", Button).disabled = not has_matches
+        # 4. Final Status
+        status.update(f"[green]Scan Complete: Found {counts['root']} Roots, {counts['season']} Seasons, {counts['episode']} Episodes.[/]")
+        self.query_one("#btn-adv-delete", Button).disabled = counts["root"] == 0
+        self.query_one("#btn-adv-reset", Button).disabled = counts["root"] == 0
+        self.query_one("#btn-adv-retry", Button).disabled = counts["root"] == 0
 
     @on(Button.Pressed, "#btn-adv-delete")
     def on_delete_click(self) -> None: self.run_worker(self.run_action("remove", "Delete"))
@@ -345,34 +348,55 @@ class AdvancedView(Vertical):
         if not self.matched_items: return
         
         status = self.query_one("#adv-status-line", Static)
-        all_ids = list(self.matched_items.keys())
-        count = len(all_ids)
+        
+        # 1. Separate Actionable from Unsupported
+        actionable_ids = []
+        unsupported_items = []
+        
+        for i_id, item in self.matched_items.items():
+            if item.get("type") in ["movie", "show"]:
+                actionable_ids.append(i_id)
+            else:
+                unsupported_items.append({"id": i_id, "title": item.get("title", "Unknown"), "type": item.get("type")})
 
-        # 1. Confirmation Modal
-        variant = "primary"
-        if action == "remove": variant = "error"
-        elif action == "reset": variant = "warning"
-
-        confirmed = await self.app.push_screen_wait(ConfirmationScreen(
-            f"Mass {display_name}",
-            f"Are you sure you want to {display_name.lower()} [bold]{count}[/] matched items from your library?",
-            confirm_label=f"Yes, {display_name} All",
-            variant=variant
-        ))
-
-        if not confirmed:
+        count = len(actionable_ids)
+        if count == 0 and not unsupported_items:
             return
 
-        # 2. Batched Execution
-        status.update(f"[yellow]Executing {display_name} on {count} items...[/]")
+        # 2. Log Unsupported to File
+        if unsupported_items:
+            import json
+            import os
+            log_file = "logs/unsupported_bulk.json"
+            try:
+                with open(log_file, "w") as f:
+                    json.dump(unsupported_items, f, indent=4)
+                self.app.log_message(f"Advanced: Logged {len(unsupported_items)} unsupported items to {log_file}")
+            except Exception as e:
+                self.app.log_message(f"Advanced: Failed to write unsupported log: {e}")
+
+        # 3. Confirmation for Actionable
+        if count > 0:
+            confirmed = await self.app.push_screen_wait(ConfirmationScreen(
+                f"Mass {display_name}",
+                f"Are you sure you want to {display_name.lower()} [bold]{count}[/] Root items?\n\n"
+                f"[yellow]{len(unsupported_items)} Seasons/Episodes will be skipped and logged.[/]",
+                confirm_label=f"Yes, {display_name} Roots",
+                variant="error" if action == "remove" else "warning"
+            ))
+            if not confirmed: return
+        else:
+            self.app.notify(f"No actionable Root items found. {len(unsupported_items)} items skipped.", severity="warning")
+            return
+
+        # 4. Batched Execution
         riven_key = self.app.settings.get("riven_key")
-        
         batch_size = 50
         success_count = 0
         fail_count = 0
 
         for i in range(0, count, batch_size):
-            batch = all_ids[i:i + batch_size]
+            batch = actionable_ids[i:i + batch_size]
             status.update(f"[yellow]{display_name} Progress: {i}/{count}...[/]")
             
             success, msg = await self.app.api.bulk_action(action, batch, riven_key)
@@ -380,22 +404,20 @@ class AdvancedView(Vertical):
                 success_count += len(batch)
             else:
                 fail_count += len(batch)
-                # Enrich error message with titles if IDs are present
                 error_msg = str(msg)
                 for item_id in batch:
                     if item_id in error_msg:
-                        title = self.matched_items.get(item_id, "Unknown")
+                        title = self.matched_items[item_id].get("title", "Unknown")
                         error_msg = error_msg.replace(item_id, f"{item_id} - {title}")
-                
                 self.app.log_message(f"Mass {display_name} Error: {error_msg}")
 
-        # 3. Final Report & Cleanup
-        if fail_count == 0:
-            status.update(f"[bold green]Success: {display_name} completed for all {count} items.[/]")
-            self.matched_items = {}
-            self.query_one("#btn-adv-delete", Button).disabled = True
-            self.query_one("#btn-adv-reset", Button).disabled = True
-            self.query_one("#btn-adv-retry", Button).disabled = True
-            self.query_one("#adv-matched-list", ListView).clear()
-        else:
-            status.update(f"[yellow]Finished with issues: {success_count} succeeded, {fail_count} failed.[/]")
+        # 5. Cleanup
+        status.update(f"[bold green]Complete: {success_count} Roots processed. {len(unsupported_items)} Unsupported skipped.[/]")
+        # Clear lists
+        self.matched_items = {}
+        self.query_one("#adv-list-root", ListView).clear()
+        self.query_one("#adv-list-season", ListView).clear()
+        self.query_one("#adv-list-episode", ListView).clear()
+        self.query_one("#btn-adv-delete", Button).disabled = True
+        self.query_one("#btn-adv-reset", Button).disabled = True
+        self.query_one("#btn-adv-retry", Button).disabled = True
