@@ -38,3 +38,4 @@ test_scrape.sh
 
 #backups
 riven_export.json
+backups/

@@ -1,0 +1,11 @@
+/* Matrix Theme - Digital Rain */
+$background: #000000;
+$surface: #0D0D0D;
+$panel: #1A1A1A;
+$foreground: #00FF41;
+$primary: #008F11;
+$secondary: #003B00;
+$accent: #D1FFBD;
+$success: #00FF41;
+$warning: #ADFF2F;
+$error: #FF3131;

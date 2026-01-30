@@ -1,0 +1,11 @@
+/* Gruvbox Theme - Retro Warmth */
+$background: #282828;
+$surface: #3c3836;
+$panel: #504945;
+$foreground: #ebdbb2;
+$primary: #458588;
+$secondary: #d3869b;
+$accent: #fabd2f;
+$success: #b8bb26;
+$warning: #fe8019;
+$error: #fb4934;

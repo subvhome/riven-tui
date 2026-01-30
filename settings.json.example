@@ -1,19 +1,33 @@
 {
     "be_config": {
         "protocol": "http",
-        "host": "localhost",
+        "host": "192.168.1.100",
         "port": 8080
     },
-    "api_base_path": "/api/v1",
-    "api_url_overrides": {
-        "scrape_stream": "/api/scrape_stream"
-    },
-    "riven_key": "YOUR_RIVEN_API_KEY",
+    "riven_key": "9dC3SpySv2sh6xS70xKCkaqzen2zXBhD",
+    "tmdb_bearer_token": "",
+    "theme": "default",
     "request_timeout": 30.0,
-    "tmdb_bearer_token": "YOUR_TMDB_BEARER_TOKEN",
+    "log_level": "INFO",
+    "log_display_limit": 20,
+    "log_refresh_interval": 5.0,
+    "chafa_max_width": 120
+}
+
+
+
+    "be_config": {
+        "protocol": "http",
+        "host": "192.168.1.100",
+        "port": 8080
+    },
+    "riven_key": "9dC3SpySv2sh6xS70xKCkaqzen2zXBhD",
+    "request_timeout": 30.0,
+    "tmdb_bearer_token": "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxZDcwYjliNzIwZTkxOGNkMTE4ZGExMzc0NTdkNWY4MyIsIm5iZiI6MTcxMDUyNDIzNi43NjcsInN1YiI6IjY1ZjQ4NzRjNzY0Yjk5MDE3ZGMwOTVmZiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.di0JfPYXYpoWRu0s-ltcYm8uum21X6bcNkZtRzmlMhM",
     "log_level": "INFO",
     "log_display_limit": 20,
     "log_tailing_enabled": true,
     "log_refresh_interval": 5.0,
-    "chafa_max_width": 120
+    "chafa_max_width": 120,
+    "api_base_path": "/api/v1"
 }

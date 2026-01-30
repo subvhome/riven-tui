@@ -1,4 +1,6 @@
-/* General */
+/* Base Layout & Structure (The Skeleton) */
+/* Variables are loaded from the Native Theme in Python */
+
 * {
     scrollbar-gutter: auto;
 }
@@ -8,12 +10,12 @@
 }
 
 Screen, App {
-    background: #1A1A2E;
-    color: #F0F0F0;
+    background: $background;
+    color: $foreground;
     scrollbar-size: 1 1;
-    scrollbar-color: #3D5A80;
-    scrollbar-color-hover: #BE95C4;
-    scrollbar-color-active: #F4D35E;
+    scrollbar-color: $primary;
+    scrollbar-color-hover: $secondary;
+    scrollbar-color-active: $accent;
 }
 
 #header-bar, #search-subheader, #workspace, #main-area, #sidebar, #content-wrapper, #content-area {
@@ -30,7 +32,7 @@ Button {
 /* Header */
 #header-bar {
     height: 3;
-    background: #24243E; /* Slightly lighter navy for the 'back' of the tabs */
+    background: $panel; 
     padding: 0 1;
     margin: 0;
     layout: horizontal;
@@ -54,7 +56,7 @@ Button {
 }
 
 .menu-button.-active {
-    background: #1A1A2E; /* MATCHES workspace background */
+    background: $background;
     color: #FFF;
     text-style: bold;
 }
@@ -63,7 +65,7 @@ Button {
     content-align: right middle;
     height: 3;
     width: 1fr;
-    color: #3D5A80;
+    color: $primary;
     text-style: italic;
     padding-right: 1;
 }
@@ -80,16 +82,16 @@ Button {
     margin-bottom: 2;
     background: transparent;
     align: center top;
-    border-bottom: solid #3D5A80;
+    border-bottom: solid $primary;
 }
 
 #grid-search-input {
     width: 100%;
     height: 1;
-    background: #141424;
+    background: $surface;
     border: none;
     text-align: center;
-    color: #F0F0F0;
+    color: $foreground;
 }
 
 #search-hover-hint {
@@ -117,25 +119,25 @@ Button {
 
 .search-tile {
     width: 100%;
-    height: 20; /* Increased from 16 to fit aspect ratio better */
+    height: 20;
     min-height: 20;
-    background: #141424;
+    background: $surface;
     border: solid #2C3E50;
     padding: 1;
 }
 
 .search-tile:hover {
     background: #24243E;
-    border: solid #BE95C4;
+    border: solid $secondary;
 }
 
 .search-tile:focus {
     background: #24243E;
-    border: double #F4D35E;
+    border: double $accent;
 }
 
 .search-tile.-hover-loading {
-    border: dashed #F4D35E; /* Gold dashed border while waiting */
+    border: dashed $accent;
 }
 
 #tile-poster {
@@ -143,7 +145,7 @@ Button {
     height: 100%;
     content-align: center middle;
     background: #000;
-    margin: -1; /* Negate parent padding to fill edge-to-edge */
+    margin: -1;
 }
 
 #tile-info {
@@ -168,7 +170,7 @@ Button {
 .tile-rating {
     width: 1fr;
     text-align: right;
-    color: #F4D35E;
+    color: $accent;
     text-style: bold;
 }
 
@@ -202,13 +204,13 @@ Button {
 /* Sidebar Overhaul */
 #sidebar {
     width: 40;
-    background: #141424; /* Darker, separate from main content */
+    background: $surface;
 }
 
 #sidebar-title {
     text-style: bold;
     background: transparent;
-    color: #BE95C4;
+    color: $secondary;
     content-align: center middle;
     height: 3;
 }
@@ -241,7 +243,7 @@ Button {
     margin-bottom: 1;
     background: #2C3E50;
     border: none;
-    height: 1; /* Clip the parent height */
+    height: 1;
 }
 
 #sidebar-filters-container Select SelectCurrent {
@@ -275,12 +277,12 @@ Button {
 }
 
 .type-pill:hover {
-    background: #3D5A80;
+    background: $primary;
     color: #AAA;
 }
 
 .type-pill.-active {
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
     text-style: bold;
 }
@@ -313,7 +315,7 @@ Button {
     width: 100%;
     text-align: center;
     background: transparent;
-    color: #BE95C4;
+    color: $secondary;
     text-style: bold italic;
     margin-top: 0;
     padding: 1 0;
@@ -336,7 +338,7 @@ Button {
 .green-separator {
     width: 25%;
     height: 1;
-    background: #6A994E;
+    background: $success;
 }
 
 .red-separator {
@@ -344,7 +346,7 @@ Button {
     height: 1;
     background: transparent;
     margin: 0;
-    color: #BE95C4;
+    color: $secondary;
     text-align: center;
     content-align: center middle;
     text-style: bold;
@@ -353,7 +355,7 @@ Button {
 .blue-separator {
     width: 20%;
     height: 1;
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
     border: none;
     padding: 0;
@@ -378,24 +380,23 @@ Button {
 }
 
 .sidebar-action-btn:hover {
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
 }
 
 #btn-apply-filters {
-    border-right: solid #141424;
+    border-right: solid $surface;
 }
 
 #btn-select-all-matches {
-    border-right: solid #141424;
+    border-right: solid $surface;
 }
 
 #btn-clear-selection {
-    border-right: solid #141424;
+    border-right: solid $surface;
 }
 
 #btn-advanced-toggle {
-    /* Subtle highlight if needed, or keep it unified */
     background: #2C3E50;
 }
 
@@ -425,16 +426,16 @@ Button {
 }
 
 .adv-box:hover {
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
 }
 
 #content-wrapper { width: 1fr; height: 1fr; }
 #content-area { 
-    background: #1A1A2E; 
+    background: $background; 
     padding: 0; 
     height: 1fr; 
-    overflow: hidden; /* Changed from overflow-y: auto to allow fixed footer */
+    overflow: hidden;
     align: center top;
 }
 
@@ -463,7 +464,7 @@ MainContent.media-details-active.-stacked #main-content-scroll-area {
 
 #modal-json-container { 
     height: auto; 
-    width: 80; /* Prevents stretching in modals */
+    width: 80;
     margin: 2 0; 
 }
 
@@ -491,7 +492,7 @@ MainContent.media-details-active.-stacked #main-content-container {
 #modal-json-container Static, #main-content-json-container Static {
     width: 100%;
     height: auto;
-    color: #BE95C4;
+    color: $secondary;
 }
 
 #btn-back-from-json, #btn-back-to-actions {
@@ -503,8 +504,8 @@ MainContent.media-details-active.-stacked #main-content-container {
 #debug-log {
     dock: bottom;
     height: 12;
-    border-top: round #BE95C4;
-    background: #0F0F1A;
+    border-top: round $secondary;
+    background: $surface;
     display: none;
 }
 
@@ -519,7 +520,7 @@ MainContent.media-details-active.-stacked #main-content-container {
 
 #log-content {
     height: 1fr;
-    background: #1A1A2E;
+    background: $background;
     padding: 0;
     scrollbar-gutter: auto;
 }
@@ -537,7 +538,7 @@ MainContent.media-details-active.-stacked #main-content-container {
     height: 1;
     min-width: 15;
     border: none;
-    background: #3D5A80;
+    background: $primary;
     margin-right: 2;
 }
 
@@ -549,7 +550,7 @@ MainContent.media-details-active.-stacked #main-content-container {
 }
 
 #cb-auto-refresh .checkbox--label {
-    color: #BE95C4;
+    color: $secondary;
 }
 
 /* Media Card Styles (Split Pane) */
@@ -570,7 +571,7 @@ MainContent.media-details-active.-stacked #main-content-container {
 .media-action-column {
     width: 75fr;
     height: 100%;
-    background: #141424; /* Subtle dark tint for the action area */
+    background: $surface;
     padding: 0;
     align: center top;
     overflow-y: auto;
@@ -580,7 +581,7 @@ MainContent.media-details-active.-stacked #main-content-container {
     dock: top;
     height: 3;
     width: 100%;
-    background: #252538; /* Distinct "header" tint for buttons */
+    background: #252538;
     margin-bottom: 0;
     padding: 0 1;
 }
@@ -600,7 +601,7 @@ MainContent.media-details-active.-stacked #main-content-container {
     dock: none;
     height: auto;
     background: transparent;
-    border-top: solid #3D5A80;
+    border-top: solid $primary;
     margin-top: 1;
 }
 .media-detail-layout.-stacked .media-action-column {
@@ -636,15 +637,15 @@ MainContent.media-details-active.-stacked #main-content-container {
 }
 
 .media-button-bar Button.error {
-    background: #E57373;
+    background: $error;
 }
 
 .media-button-bar Button.warning {
-    background: #F4D35E;
+    background: $warning;
 }
 
 .media-button-bar Button.success {
-    background: #6A994E;
+    background: $success;
 }
 
 #btn-reset, #btn-retry, #btn-manual-scrape, #btn-print-json {
@@ -671,12 +672,12 @@ MainContent.media-details-active.-stacked #main-content-container {
     content-align: center middle;
     margin: 0;
     padding: 1 0;
-    background: #0F0F1A; /* Even darker "board" for the poster */
+    background: #0F0F1A;
 }
 
 /* Sidebar Item Styles */
 ListView, ListItem {
-    background: #1A1A2E;
+    background: $background;
 }
 
 ListItem {
@@ -684,15 +685,15 @@ ListItem {
     padding: 0 1;
     margin: 0;
     border: none;
-    background: #141424;
+    background: $surface;
 }
 
 ListItem:even {
-    background: #1C1C2E; /* Subtle alternating tint for sidebar items */
+    background: #1C1C2E;
 }
 
 ListItem:hover {
-    background: #3D5A80 !important;
+    background: $primary !important;
 }
 
 .sidebar-item-layout {
@@ -702,29 +703,29 @@ ListItem:hover {
 }
 
 .search-item-title {
-    color: #F0F0F0;
+    color: $foreground;
     margin-top: 0;
 }
 
 .search-item-tagline {
-    color: #6A994E;
+    color: $success;
     text-style: italic;
     height: 1;
 }
 
 .search-item-meta {
-    color: #709fdc; /* Lighter blue for better visibility */
+    color: #709fdc;
     height: 1;
 }
 
 ListItem:hover .search-item-meta,
 ListItem:focus .search-item-meta {
-    color: #FFFFFF; /* High contrast when highlighted */
+    color: #FFFFFF;
 }
 
 .sidebar-item-layout:hover {
-    background: #BE95C4;
-    color: #1A1A2E;
+    background: $secondary;
+    color: $background;
 }
 
 .centered-modal-screen {
@@ -736,8 +737,8 @@ ListItem:focus .search-item-meta {
     width: 90%;
     max-width: 120;
     height: 90%;
-    background: #1A1A2E;
-    border: round #3D5A80;
+    background: $background;
+    border: round $primary;
     padding: 1 2;
 }
 
@@ -763,7 +764,7 @@ ListItem:focus .search-item-meta {
     height: 3;
     width: 100%;
     margin: 0;
-    background: #252538;
+    background: $panel;
 }
 
 #modal-scroll-area {
@@ -778,16 +779,16 @@ ListItem:focus .search-item-meta {
 
 /* Library Item Card Styles - Shares layout with search results */
 .library-item-card {
-    border-left: thick #3D5A80;
+    border-left: thick $primary;
 }
 
 .library-item-card.-selected {
     background: rgba(61, 90, 128, 0.3);
-    border-left: thick #F4D35E;
+    border-left: thick $accent;
 }
 
 .library-item-card:hover {
-    border-left: thick #F0F0F0;
+    border-left: thick $foreground;
 }
 
 .card-main-row {
@@ -819,12 +820,12 @@ ListItem:focus .search-item-meta {
 .selection-square {
     width: 2;
     height: 1;
-    color: #444; /* Dim gray for ░░ */
+    color: #444;
     background: transparent;
 }
 
 .library-item-card.-selected .selection-square {
-    color: #F4D35E; /* Vibrant gold for ███ */
+    color: $accent;
 }
 
 .card-content-col {
@@ -854,15 +855,15 @@ ListItem:focus .search-item-meta {
 }
 
 .input-error {
-    border: round #E57373;
+    border: round $error;
 }
 
 .modal-popup {
     width: 50%;
     height: 50%;
     align: center middle;
-    background: #1A1A2E; 
-    border: round #BE95C4; 
+    background: $background; 
+    border: round $secondary; 
     padding: 1;
 }
 
@@ -870,14 +871,14 @@ ListItem:focus .search-item-meta {
     width: 60;
     height: auto;
     padding: 2;
-    background: #1A1A2E;
-    border: round #BE95C4;
+    background: $background;
+    border: round $secondary;
 }
 
 #update-title {
     text-align: center;
     text-style: bold;
-    color: #F4D35E;
+    color: $accent;
     margin-bottom: 1;
 }
 
@@ -918,7 +919,7 @@ ListItem:focus .search-item-meta {
     text-align: center;
     text-style: bold;
     margin-bottom: 1;
-    color: #F4D35E;
+    color: $accent;
 }
 
 #chafa-check-message {
@@ -945,7 +946,7 @@ ListItem:focus .search-item-meta {
 #confirmation-title {
     text-align: center;
     text-style: bold;
-    color: #F4D35E;
+    color: $accent;
     margin-bottom: 1;
 }
 
@@ -974,8 +975,8 @@ ListItem:focus .search-item-meta {
 #calendar-header-container {
     height: 3;
     align: center middle;
-    background: #1A1A2E;
-    border-bottom: round #3D5A80;
+    background: $background;
+    border-bottom: round $primary;
     margin-bottom: 1;
     padding: 0 2;
 }
@@ -984,7 +985,7 @@ ListItem:focus .search-item-meta {
     text-align: center;
     width: 1fr;
     text-style: bold;
-    color: #F0F0F0;
+    color: $foreground;
 }
 
 #calendar-header-container Button {
@@ -1085,14 +1086,14 @@ ListItem:focus .search-item-meta {
     height: 3;
     align: left middle;
     padding: 0 2;
-    border-bottom: solid #3D5A80;
+    border-bottom: solid $primary;
     background: transparent;
 }
 
 .calendar-date-label {
     width: 1fr;
     text-style: bold;
-    color: #F0F0F0;
+    color: $foreground;
     background: transparent;
 }
 
@@ -1109,12 +1110,12 @@ ListItem:focus .search-item-meta {
     padding: 0 2;
     layout: horizontal;
     align: left middle;
-    border-left: solid #3D5A80;
+    border-left: solid $primary;
 }
 
 .calendar-card:focus {
     background: rgba(255, 255, 255, 0.1);
-    border: solid #F4D35E;
+    border: solid $accent;
 }
 
 .calendar-card * {
@@ -1136,7 +1137,7 @@ ListItem:focus .search-item-meta {
 
 .calendar-card-title {
     text-style: bold;
-    color: #F0F0F0;
+    color: $foreground;
     background: transparent;
 }
 
@@ -1147,19 +1148,19 @@ ListItem:focus .search-item-meta {
 
 /* Type Specific Card Colors (Translucent Tinted Backgrounds) */
 .calendar-card-movie {
-    background: rgba(230, 126, 34, 0.15); /* Soft Orange tint */
+    background: rgba(230, 126, 34, 0.15);
     border-left: solid #E67E22;
 }
 .calendar-card-episode {
-    background: rgba(52, 152, 219, 0.15); /* Soft Blue tint */
+    background: rgba(52, 152, 219, 0.15);
     border-left: solid #3498DB;
 }
 .calendar-card-season {
-    background: rgba(46, 204, 113, 0.15); /* Soft Green tint */
+    background: rgba(46, 204, 113, 0.15);
     border-left: solid #2ECC71;
 }
 .calendar-card-show {
-    background: rgba(155, 89, 182, 0.15); /* Soft Purple tint */
+    background: rgba(155, 89, 182, 0.15);
     border-left: solid #9B59B6;
 }
 
@@ -1171,14 +1172,14 @@ ListItem:focus .search-item-meta {
 
 .sidebar-subtitle {
     text-style: bold;
-    color: #3D5A80;
+    color: $primary;
     margin-top: 1;
     margin-bottom: 1;
     text-align: center;
 }
 
 .sidebar-separator {
-    color: #3D5A80;
+    color: $primary;
     margin-bottom: 1;
 }
 
@@ -1200,7 +1201,7 @@ ListItem:focus .search-item-meta {
     width: 1fr;
     text-align: center;
     text-style: bold;
-    color: #F0F0F0;
+    color: $foreground;
 }
 
 /* Calendar Grid */
@@ -1229,7 +1230,7 @@ ListItem:focus .search-item-meta {
 }
 
 .grid-header-cell {
-    color: #3D5A80;
+    color: $primary;
     text-style: bold;
 }
 
@@ -1238,12 +1239,12 @@ ListItem:focus .search-item-meta {
 }
 
 .day-cell:hover {
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
 }
 
 .has-content {
-    color: #BE95C4;
+    color: $secondary;
     text-style: bold;
 }
 
@@ -1263,33 +1264,33 @@ ListItem:focus .search-item-meta {
 .bulk-area-panel {
     height: auto;
     width: 100%;
-    background: #1E1E32;
+    background: $panel;
     padding: 2 4;
-    border-left: thick #BE95C4;
+    border-left: thick $secondary;
     margin-bottom: 1;
 }
 
 .advanced-label {
     text-style: bold;
-    color: #BE95C4;
+    color: $secondary;
     margin-bottom: 1;
 }
 
 .advanced-header-toggle {
     text-style: bold;
-    color: #BE95C4;
+    color: $secondary;
     margin-bottom: 1;
     background: transparent;
     padding: 0 1;
 }
 
 .advanced-header-toggle:hover {
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
 }
 
 .advanced-row {
-    height: 1; /* 1-character high */
+    height: 1;
     margin-bottom: 1;
     align: left middle;
 }
@@ -1315,10 +1316,10 @@ ListItem:focus .search-item-meta {
 
 .advanced-sub-label {
     text-style: bold;
-    color: #BE95C4;
+    color: $secondary;
     margin-bottom: 0;
     text-align: center;
-    background: #141424;
+    background: $surface;
 }
 
 #adv-results-row {
@@ -1331,7 +1332,7 @@ ListItem:focus .search-item-meta {
 .advanced-column {
     width: 1fr;
     height: 100%;
-    border: solid #3D5A80;
+    border: solid $primary;
     margin: 0 1;
     background: #0F0F1A;
 }
@@ -1348,8 +1349,8 @@ ListItem:focus .search-item-meta {
 }
 
 .column-header-root { border-top: thick #6A994E; }
-.column-header-season { border-top: thick #E57373; }
-.column-header-episode { border-top: thick #E57373; }
+.column-header-season { border-top: thick $error; }
+.column-header-episode { border-top: thick $error; }
 
 #adv-matched-list {
     background: transparent;
@@ -1367,7 +1368,7 @@ ListItem:focus .search-item-meta {
 }
 
 .advanced-sep {
-    color: #3D5A80;
+    color: $primary;
     margin: 1 0;
 }
 
@@ -1392,21 +1393,21 @@ ListItem:focus .search-item-meta {
 #settings-sidebar {
     width: 30;
     height: 100%;
-    background: #1A1A2E;
-    border-right: round #3D5A80;
+    background: $background;
+    border-right: round $primary;
 }
 
 #settings-sidebar-title {
     text-align: center;
-    background: #1A1A2E;
-    color: #F0F0F0;
+    background: $background;
+    color: $foreground;
     padding: 1;
     text-style: bold;
-    border-bottom: round #3D5A80;
+    border-bottom: round $primary;
 }
 
 #settings-tree {
-    background: #1A1A2E;
+    background: $background;
     padding: 1;
 }
 
@@ -1414,12 +1415,12 @@ ListItem:focus .search-item-meta {
     width: 1fr;
     height: 100%;
     padding: 2;
-    background: #1A1A2E;
+    background: $background;
 }
 
 #settings-content-title {
     text-style: bold underline;
-    color: #BE95C4;
+    color: $secondary;
     margin-bottom: 2;
     text-align: left;
 }
@@ -1434,7 +1435,7 @@ ListItem:focus .search-item-meta {
     height: 3;
     margin-top: 1;
     align: right middle;
-    border-top: solid #3D5A80;
+    border-top: solid $primary;
     padding-top: 1;
 }
 
@@ -1456,7 +1457,7 @@ ListItem:focus .search-item-meta {
 
 .setting-label {
     width: 40;
-    color: #F0F0F0;
+    color: $foreground;
     text-style: bold;
     padding-right: 2;
 }
@@ -1481,12 +1482,12 @@ ListItem:focus .search-item-meta {
 .setting-field-v SelectCurrent {
     border: none;
     background: #2C3E50;
-    color: #F0F0F0;
+    color: $foreground;
     height: 3;
 }
 
 .setting-field-v SelectCurrent:hover {
-    background: #3D5A80;
+    background: $primary;
 }
 
 /* Remove any background from the label/icon inside SelectCurrent */
@@ -1497,11 +1498,11 @@ ListItem:focus .search-item-meta {
 /* Style the actual dropdown list that appears when clicked */
 .setting-field-v SelectOverlay {
     background: #2C3E50;
-    border: solid #3D5A80;
+    border: solid $primary;
 }
 
 .setting-field-v Select:focus > SelectCurrent {
-    background: #3D5A80;
+    background: $primary;
 }
 
 .setting-field-v TextArea {
@@ -1540,15 +1541,15 @@ ListItem:focus .search-item-meta {
 
 #logs-display {
     height: 1fr;
-    background: #1A1A2E;
-    border: round #3D5A80;
+    background: $background;
+    border: round $primary;
     margin-bottom: 1;
 }
 
 #logs-controls {
     height: 3;
     align: left middle;
-    background: #1A1A2E;
+    background: $background;
     padding: 0 1;
 }
 
@@ -1574,7 +1575,7 @@ ListItem:focus .search-item-meta {
 }
 
 #logs-controls Checkbox .checkbox--label {
-    color: #BE95C4;
+    color: $secondary;
 }
 
 
@@ -1591,7 +1592,7 @@ ListItem:focus .search-item-meta {
     height: 3;
     margin-top: 5;
     background: transparent;
-    border: round #3D5A80;
+    border: round $primary;
     layout: horizontal;
     align: center middle;
     padding: 0 2;
@@ -1600,7 +1601,7 @@ ListItem:focus .search-item-meta {
 #db-stats-label {
     width: 1fr;
     text-align: center;
-    color: #F0F0F0;
+    color: $foreground;
 }
 
 #db-health-label {
@@ -1623,9 +1624,9 @@ ListItem:focus .search-item-meta {
 .db-tile-header {
     height: 2;
     background: transparent;
-    color: #BE95C4;
+    color: $secondary;
     text-style: bold;
-    border-bottom: round #3D5A80;
+    border-bottom: round $primary;
     layout: horizontal;
     align: left middle;
     padding: 0 1;
@@ -1659,17 +1660,17 @@ ListItem:focus .search-item-meta {
 .db-list-item-label {
     width: 1fr;
     height: 1;
-    color: #F0F0F0;
+    color: $foreground;
     background: transparent;
 }
 
 .db-list-item-container:hover {
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
 }
 
 .db-list-item-container:focus {
-    background: #3D5A80;
+    background: $primary;
     color: #FFF;
 }
 
@@ -1681,7 +1682,7 @@ ListItem:focus .search-item-meta {
     padding: 0 1;
     border: none;
     background: transparent;
-    color: #6A994E;
+    color: $success;
     text-style: bold;
 }
 
@@ -1712,9 +1713,9 @@ ListItem:focus .search-item-meta {
     width: 60%;
     height: auto;
     margin-top: 2;
-    border: round #3D5A80;
+    border: round $primary;
     border-title-align: center;
-    border-title-color: #BE95C4;
+    border-title-color: $secondary;
     border-title-style: bold;
 }
 
@@ -1724,27 +1725,27 @@ ListItem:focus .search-item-meta {
     background: transparent;
     border: none;
     layout: grid;
-    grid-size: 5; /* Reduced to 5 columns to give names more room */
-    grid-gutter: 0 1; /* 0 vertical, 1 horizontal gutter */
+    grid-size: 5;
+    grid-gutter: 0 1;
     padding: 0 1;
 }
 
 .db-service-pill {
     width: 100%;
     height: 1;
-    color: #F0F0F0;
+    color: $foreground;
     text-align: left;
     content-align: left middle;
     background: transparent;
 }
 
 .pill-unhealthy {
-    color: #E57373;
+    color: $error;
     text-style: bold;
 }
 
 .pill-healthy {
-    color: #F0F0F0;
+    color: $foreground;
 }
 
 .pill-disabled {
@@ -1756,16 +1757,16 @@ ListItem:focus .search-item-meta {
     height: auto;
     margin-top: 4;
     margin-bottom: 5;
-    border: round #3D5A80;
+    border: round $primary;
     border-title-align: center;
-    border-title-color: #BE95C4;
+    border-title-color: $secondary;
     border-title-style: bold;
 }
 
 #db-states-grid {
     layout: grid;
     grid-size: 6;
-    grid-rows: 3 3; /* Force two rows of 3-height */
+    grid-rows: 3 3;
     grid-gutter: 1;
     width: 100%;
     height: auto;
@@ -1786,7 +1787,7 @@ ListItem:focus .search-item-meta {
 
 .db-state-count {
     text-style: bold;
-    color: #F0F0F0;
+    color: $foreground;
 }
 
 .tile-state {
@@ -1794,20 +1795,20 @@ ListItem:focus .search-item-meta {
     height: 1;
     padding: 0 1;
     text-style: bold;
-    color: #F0F0F0;
+    color: $foreground;
 }
 
-.state-completed { color: #6A994E; }
+.state-completed { color: $success; }
 .state-partiallycompleted { color: #A7C957; }
-.state-indexed { color: #3D5A80; }
-.state-ongoing { color: #F4D35E; }
-.state-scraped { color: #BE95C4; }
-.state-downloaded { color: #BE95C4; }
-.state-failed { color: #E57373; }
-.state-paused { color: #F4D35E; }
+.state-indexed { color: $primary; }
+.state-ongoing { color: $warning; }
+.state-scraped { color: $secondary; }
+.state-downloaded { color: $secondary; }
+.state-failed { color: $error; }
+.state-paused { color: $warning; }
 .state-requested { color: #777; }
 
-.state-completed .db-state-count { color: #6A994E; }
-.state-failed .db-state-count { color: #E57373; }
-.state-paused .db-state-count { color: #F4D35E; }
-.state-indexed .db-state-count { color: #3D5A80; }
+.state-completed .db-state-count { color: $success; }
+.state-failed .db-state-count { color: $error; }
+.state-paused .db-state-count { color: $warning; }
+.state-indexed .db-state-count { color: $primary; }

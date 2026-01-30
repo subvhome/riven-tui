@@ -9,6 +9,7 @@ from logging.handlers import RotatingFileHandler
 import shutil
 from textual import on
 from textual.app import App, ComposeResult
+from textual.theme import Theme
 from textual.widgets import Header, Footer, Static, Input, ListView, ListItem, Label, Button, Log, Markdown, Select, Checkbox, ProgressBar, RichLog
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.message import Message
@@ -195,6 +196,7 @@ class RivenTUI(App):
     CSS_PATH = "riven_tui.tcss"
     BINDINGS = [
         ("ctrl+t", "toggle_debug", "Debug"),
+        ("ctrl+y", "cycle_theme", "Cycle Theme"),
     ]
 
     base_title = reactive("Riven TUI") 
@@ -251,13 +253,58 @@ class RivenTUI(App):
         self.reconfigure_redaction()
         self.log_message("Settings updated in memory (not saved to settings.json)")
 
+    def parse_tcss_theme(self, name: str, file_path: str) -> Theme:
+        """Parses a .tcss file containing only variables and returns a Theme object."""
+        colors = {
+            "primary": "#3D5A80", "secondary": "#BE95C4", "accent": "#F4D35E",
+            "foreground": "#F0F0F0", "background": "#1A1A2E", "surface": "#141424",
+            "panel": "#24243E", "success": "#6A994E", "warning": "#F4D35E", "error": "#E57373"
+        }
+        try:
+            with open(file_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("$") and ":" in line:
+                        key, val = line.split(":", 1)
+                        key = key.strip("$").strip()
+                        val = val.strip().strip(";")
+                        if key in colors:
+                            colors[key] = val
+        except Exception:
+            pass # Fall back to default colors on error
+            
+        return Theme(
+            name=name,
+            primary=colors["primary"],
+            secondary=colors["secondary"],
+            accent=colors["accent"],
+            foreground=colors["foreground"],
+            background=colors["background"],
+            surface=colors["surface"],
+            panel=colors["panel"],
+            success=colors["success"],
+            warning=colors["warning"],
+            error=colors["error"]
+        )
+
     def on_load(self) -> None: 
         try:
             with open("settings.json", "r") as f:
                 self.settings = json.load(f)
             self.reconfigure_redaction()
+            
+            # Load and Register selected theme
+            theme_name = self.settings.get("theme", "default")
+            theme_path = f"themes/{theme_name}.tcss"
+            import os
+            if not os.path.exists(theme_path):
+                theme_path = "themes/default.tcss"
+            
+            theme_obj = self.parse_tcss_theme(theme_name, theme_path)
+            self.register_theme(theme_obj)
+            self.theme = theme_name
+            
         except Exception as e:
-            # We don't use tui_logger yet because logging isn't fully set up in on_load usually
             pass
         
         self.chafa_available = shutil.which("chafa") is not None
@@ -278,6 +325,46 @@ class RivenTUI(App):
             log_widget.toggle_class("-visible")
         except NoMatches:
             pass
+
+    async def action_cycle_theme(self) -> None:
+        """Cycles through available themes in the themes/ directory."""
+        import os
+        import json
+        
+        try:
+            # 1. Get all .tcss files in themes/
+            files = [f.replace(".tcss", "") for f in os.listdir("themes") if f.endswith(".tcss")]
+            if not files: return
+            
+            # 2. Determine current and next index
+            current_theme = self.settings.get("theme", "default")
+            try:
+                idx = files.index(current_theme)
+                next_idx = (idx + 1) % len(files)
+            except ValueError:
+                next_idx = 0
+                
+            new_theme_name = files[next_idx]
+            theme_path = f"themes/{new_theme_name}.tcss"
+            
+            # 3. Parse, Register and Apply
+            theme_obj = self.parse_tcss_theme(new_theme_name, theme_path)
+            self.register_theme(theme_obj)
+            self.theme = new_theme_name
+            
+            # 4. Save to settings
+            self.settings["theme"] = new_theme_name
+            try:
+                with open("settings.json", "w") as f:
+                    json.dump(self.settings, f, indent=4)
+            except Exception as e:
+                self.log_message(f"Theme: Error saving selection: {e}")
+                
+            self.notify(f"Theme switched to: [bold]{new_theme_name.upper()}[/]", severity="information")
+            self.log_message(f"Theme: Switched to {new_theme_name}")
+            
+        except Exception as e:
+            self.log_message(f"Theme Cycle Error: {e}")
 
     @on(LogMessage)
     def on_log_message(self, message: LogMessage) -> None:
@@ -418,13 +505,11 @@ class RivenTUI(App):
 
         try:
             be_url = self.build_url("be_config")
-            api_path = self.settings.get("api_base_path", "/api/v1")
-            api_overrides = self.settings.get("api_url_overrides", {})
             timeout = self.settings.get("request_timeout", 10.0)
 
-            self.tui_logger.debug(f"Initializing API with BE URL: {be_url}, path: {api_path}, timeout: {timeout}")
-            self.api = RivenAPI(be_url, api_base_path=api_path, api_url_overrides=api_overrides, timeout=timeout)
-            self.log_message(f"API Initialized: BE='{be_url}{api_path}'")
+            self.tui_logger.debug(f"Initializing API with BE URL: {be_url}, timeout: {timeout}")
+            self.api = RivenAPI(be_url, timeout=timeout)
+            self.log_message(f"API Initialized: BE='{be_url}'")
             
             # Fetch Genres for Search View
             self.tui_logger.debug("Fetching TMDB genres...")

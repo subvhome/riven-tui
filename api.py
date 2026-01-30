@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional
 
 class RivenAPI:
-    def __init__(self, be_base_url, api_base_path="/api/v1", api_url_overrides=None, timeout=10.0):
+    def __init__(self, be_base_url, timeout=10.0):
         self.mdblist_api_key = "kgx75hvk95is39a6joe68tgux"
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
@@ -13,8 +13,7 @@ class RivenAPI:
         }
         self.client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers=headers)
         self.be_base_url = be_base_url
-        self.api_base_path = api_base_path.rstrip("/")
-        self.url_overrides = api_url_overrides or {}
+        self.api_base_path = "/api/v1"
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.mdblist_base_url = "https://api.mdblist.com"
         self.logger = logging.getLogger("Riven.API")
@@ -275,10 +274,7 @@ class RivenAPI:
             return None, str(e)
 
     async def scrape_stream(self, media_type: str, tmdb_id: int, riven_key: str, item_id: str = None, tvdb_id: Optional[int] = None):
-        if "scrape_stream" in self.url_overrides:
-            url = f"{self.be_base_url}{self.url_overrides['scrape_stream']}"
-        else:
-            url = f"{self.be_base_url}{self.api_base_path}/scrape/scrape_stream"
+        url = f"{self.be_base_url}/api/scrape_stream"
         
         if item_id:
             params = {"media_type": media_type, "item_id": item_id}

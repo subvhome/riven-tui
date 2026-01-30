@@ -1,0 +1,11 @@
+/* Default Theme Variables */
+$primary: #3D5A80;
+$secondary: #BE95C4;
+$accent: #F4D35E;
+$foreground: #F0F0F0;
+$background: #1A1A2E;
+$surface: #141424;
+$panel: #24243E;
+$success: #6A994E;
+$warning: #F4D35E;
+$error: #E57373;

@@ -1,0 +1,11 @@
+/* Nord Theme - Arctic Professional */
+$background: #2E3440;
+$surface: #3B4252;
+$panel: #434C5E;
+$foreground: #D8DEE9;
+$primary: #81A1C1;
+$secondary: #88C0D0;
+$accent: #EBCB8B;
+$success: #A3BE8C;
+$warning: #D08770;
+$error: #BF616A;
