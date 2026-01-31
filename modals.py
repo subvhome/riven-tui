@@ -72,13 +72,17 @@ class UpdateScreen(ModalScreen[bool]):
     async def perform_git_pull(self):
         bar = self.query_one("#update-bar", ProgressBar)
         details = self.query_one("#update-details", Static)
+        import sys
         
         try:
             steps = [
                 ("Fetching...", ["git", "fetch", "--all"]),
                 ("Resetting...", ["git", "reset", "--hard", "origin/main"]),
                 ("Pulling...", ["git", "pull", "origin", "main"]),
+                ("Updating dependencies...", [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]),
             ]
+            
+            step_increment = 100 / len(steps)
             
             for i, (msg, cmd) in enumerate(steps):
                 details.update(f"[yellow]{msg}[/]")
@@ -92,7 +96,7 @@ class UpdateScreen(ModalScreen[bool]):
                 if process.returncode != 0:
                     raise Exception(stderr.decode().strip())
                 
-                bar.advance(33.3)
+                bar.advance(step_increment)
 
             details.update("[bold green]Update successful![/]\n[cyan]The application will now exit.\nPlease relaunch to use the new version.")
             await asyncio.sleep(3)

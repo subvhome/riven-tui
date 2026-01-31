@@ -424,14 +424,15 @@ class RivenTUI(App):
     async def check_for_updates(self):
         """Checks GitHub for a newer version string."""
         import time
+        import re
         url = f"https://raw.githubusercontent.com/subvhome/riven-tui/main/version.py?t={int(time.time())}"
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     remote_content = resp.text
-                    import re
-                    match = re.search(r'VERSION\s*=\s*"([^"]+)"', remote_content)
+                    # Support both single and double quotes
+                    match = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', remote_content)
                     if match:
                         remote_version = match.group(1)
                         
