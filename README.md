@@ -29,9 +29,9 @@ curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh |
 ```
 
 ### Alpine Linux
-Optimized for Alpine's `apk` package manager and `wget`.
+Pure POSIX-compliant installer optimized for Alpine's `apk` and `ash` shell.
 ```bash
-wget -qO- https://raw.githubusercontent.com/subvhome/riven-tui/main/install_alpine.sh | bash
+wget -qO- https://raw.githubusercontent.com/subvhome/riven-tui/main/install_alpine.sh | sh
 ```
 
 ### Manual Setup
