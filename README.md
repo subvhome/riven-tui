@@ -22,8 +22,16 @@ Riven TUI turns your shell into a dedicated media kiosk, allowing you to discove
 
 ## Installation
 
+### Standard Linux (Debian, Ubuntu, Fedora, Arch, macOS)
+Supports most distributions using `apt`, `dnf`, `pacman`, or `brew`.
 ```bash
 curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh | bash
+```
+
+### Alpine Linux
+Optimized for Alpine's `apk` package manager and `wget`.
+```bash
+wget -qO- https://raw.githubusercontent.com/subvhome/riven-tui/main/install_alpine.sh | bash
 ```
 
 ### Manual Setup
