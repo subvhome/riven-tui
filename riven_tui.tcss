@@ -1598,9 +1598,13 @@ ListItem:focus .search-item-meta {
     align: center top;
     overflow-y: auto;
 }
+#db-header, #db-data-row, #db-pills-frame,
+#db-states-frame {
+    width: 80%; /* Keeps everything aligned in a
+center column */
+}
 
 #db-header {
-    width: 60%;
     height: 3;
     margin-top: 5;
     background: transparent;
@@ -1622,7 +1626,6 @@ ListItem:focus .search-item-meta {
 }
 
 #db-data-row {
-    width: 60%;
     height: auto;
     margin-top: 5;
     layout: horizontal;
@@ -1722,7 +1725,6 @@ ListItem:focus .search-item-meta {
 }
 
 #db-pills-frame {
-    width: 60%;
     height: auto;
     margin-top: 2;
     border: round $primary;
@@ -1765,7 +1767,6 @@ ListItem:focus .search-item-meta {
 }
 
 #db-states-frame {
-    width: 60%;
     height: auto;
     margin-top: 4;
     margin-bottom: 5;

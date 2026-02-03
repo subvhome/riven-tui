@@ -39,3 +39,7 @@ test_scrape.sh
 #backups
 riven_export.json
 backups/
+
+
+#misc
+run_dev.sh
