@@ -20,6 +20,20 @@ printf "==========================================${NC}\n"
 # 1. Dependency Checks & Installation
 printf "${YELLOW}[1/6] Checking and installing system requirements...${NC}\n"
 
+# Check for pending updates
+printf "${BLUE}Checking for pending system updates...${NC}\n"
+UPDATES=$(apk version -v | grep -c '<' || echo "0")
+if [ "$UPDATES" -gt 0 ]; then
+    printf "${YELLOW}⚠️  Notice: There are $UPDATES pending system updates.${NC}\n"
+    printf "It is recommended to run ${BLUE}apk update && apk upgrade${NC} before installing new software.\n"
+    printf "Would you like to continue anyway? (y/N): "
+    read CONTINUE_INSTALL < /dev/tty
+    case "$CONTINUE_INSTALL" in
+        [Yy]*) ;; 
+        *) printf "${RED}Setup aborted. Please update your system and try again.${NC}\n"; exit 1 ;; 
+    esac
+fi
+
 # Ensure we have the basics
 if command -v sudo >/dev/null 2>&1; then
     SUDO="sudo"

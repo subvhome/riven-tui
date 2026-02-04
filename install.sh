@@ -19,6 +19,22 @@ echo -e "==========================================${NC}"
 # 1. Dependency Checks
 echo -e "${YELLOW}[1/6] Checking system requirements...${NC}"
 
+# Check for pending updates (Debian/Ubuntu specific)
+if command -v apt-get &> /dev/null; then
+    echo -e "${BLUE}Checking for pending system updates...${NC}"
+    UPDATES=$(apt-get -s upgrade | grep -P '^\d+ upgraded' | cut -d' ' -f1 || echo "0")
+    if [ "$UPDATES" -gt 0 ]; then
+        echo -e "${YELLOW}⚠️  Notice: There are $UPDATES pending system updates.${NC}"
+        echo -e "It is highly recommended to run ${CYAN}sudo apt update && sudo apt upgrade${NC} before installing new software."
+        echo -n "Would you like to continue anyway? (y/N): "
+        read CONTINUE_INSTALL < /dev/tty
+        if [[ ! $CONTINUE_INSTALL =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Setup aborted. Please update your system and try again.${NC}"
+            exit 1
+        fi
+    fi
+fi
+
 if ! command -v git &> /dev/null; then
     echo -e "${RED}Error: git is not installed. Please install git and try again.${NC}"
     exit 1
@@ -183,19 +199,31 @@ echo -n "Would you like to try installing chafa? (Requires sudo) [Y/n]: "
 
 
 
-        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 
 
 
-            if command -v apt-get &> /dev/null; then
+        
 
 
 
-                sudo apt-get update && sudo apt-get install -y chafa
+                    if command -v apt-get &> /dev/null; then
 
 
 
-            elif command -v dnf &> /dev/null; then
+        
+
+
+
+                        sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y chafa
+
+
+
+        
+
+
+
+                    elif command -v dnf &> /dev/null; then
 
 
 
