@@ -30,8 +30,7 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # Check Python version (requires 3.12+)
-python3 -c 'import sys; exit(0 if sys.version_info >= (3, 12) else 1)'
-if [ $? -ne 0 ]; then
+if ! python3 -c 'import sys; exit(0 if sys.version_info >= (3, 12) else 1)'; then
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')
     echo -e "${YELLOW}Warning: Riven TUI recommends Python 3.12+. Found version $PYTHON_VERSION.${NC}"
 fi
