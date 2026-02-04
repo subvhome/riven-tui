@@ -271,6 +271,7 @@ echo -e "${YELLOW}[6/6] Finishing up...${NC}"
 
 cat > run.sh <<EOF
 #!/bin/bash
+export COLORTERM=truecolor
 cd "$INSTALL_DIR"
 source .venv/bin/activate
 python3 riven_tui.py
