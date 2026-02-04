@@ -40,23 +40,30 @@ class ConfirmationScreen(ModalScreen[bool]):
         self.dismiss(False)
 
 class UpdateScreen(ModalScreen[bool]):
-    def __init__(self, remote_version: str, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
+    def __init__(self, remote_version: str, is_git_repo: bool = True, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
         self.remote_version = remote_version
+        self.is_git_repo = is_git_repo
 
     def compose(self) -> ComposeResult:
         with Vertical(id="update-container", classes="modal-popup"):
             yield Static("✨ New Update Available", id="update-title")
-            yield Static(f"Version [bold]{self.remote_version}[/bold] is now available.\n(Current: {VERSION})\n\nWould you like to update now?", id="update-message")
             
-            with Vertical(id="update-progress-container", classes="hidden"):
-                yield Label("Updating files...")
-                yield ProgressBar(total=100, id="update-bar")
-                yield Static("", id="update-details")
+            if self.is_git_repo:
+                yield Static(f"Version [bold]{self.remote_version}[/bold] is now available.\n(Current: {VERSION})\n\nWould you like to update now?", id="update-message")
+                
+                with Vertical(id="update-progress-container", classes="hidden"):
+                    yield Label("Updating files...")
+                    yield ProgressBar(total=100, id="update-bar")
+                    yield Static("", id="update-details")
 
-            with Horizontal(id="update-buttons"):
-                yield Button("Update Now", id="btn-update-confirm", variant="success")
-                yield Button("Later", id="btn-update-cancel")
+                with Horizontal(id="update-buttons"):
+                    yield Button("Update Now", id="btn-update-confirm", variant="success")
+                    yield Button("Later", id="btn-update-cancel")
+            else:
+                yield Static(f"Version [bold]{self.remote_version}[/bold] is now available.\n(Current: {VERSION})\n\n[bold red]Automatic update unavailable (not a git repository).[/]\nPlease pull the latest Docker image or release manually.", id="update-message")
+                with Horizontal(id="update-buttons"):
+                    yield Button("Close", id="btn-update-cancel", variant="primary")
 
     @on(Button.Pressed, "#btn-update-confirm")
     async def on_confirm(self) -> None:
