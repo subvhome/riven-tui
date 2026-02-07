@@ -110,9 +110,9 @@ class DashboardView(Vertical):
             
             rating_val = 0
             if ratings and item_id in ratings:
-                rating_val = ratings[item_id]
+                rating_val = ratings[item_id] or 0
             else:
-                rating_val = item.get("vote_average", 0)
+                rating_val = item.get("vote_average") or 0
 
             rating = f" [#D4AF37]{rating_val:.1f}[/]" if rating_val > 0 else ""
 
@@ -134,7 +134,7 @@ class DashboardView(Vertical):
             if release_date and len(release_date) >= 4:
                 year = f" ({release_date[:4]})"
             
-            rating_val = item.get("vote_average", 0)
+            rating_val = item.get("vote_average") or 0
             rating = f" [#D4AF37]{rating_val:.1f}[/]" if rating_val > 0 else ""
 
             media_type = item.get("media_type", "movie")

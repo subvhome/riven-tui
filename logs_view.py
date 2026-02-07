@@ -14,7 +14,7 @@ class LogsView(Vertical):
         self.displayed_count = 0
 
     def compose(self) -> ComposeResult:
-        yield RichLog(id="logs-display", wrap=True, highlight=True, markup=True)
+        yield RichLog(id="logs-display", wrap=False, highlight=True, markup=True)
         with Horizontal(id="logs-controls"):
             yield Input(placeholder="Filter logs (use ! to exclude)...", id="logs-filter-input")
             yield Button("Refresh", id="btn-logs-refresh", variant="primary")

@@ -31,7 +31,7 @@ class SearchGridTile(Vertical):
         date = self.item_data.get('release_date') or self.item_data.get('first_air_date')
         year = date[:4] if date else "????"
         
-        rating = self.item_data.get('vote_average', 0)
+        rating = self.item_data.get('vote_average') or 0
         rating_str = f"⭐ {rating:.1f}" if rating > 0 else ""
         
         state = self.item_data.get('state')

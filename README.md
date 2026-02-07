@@ -34,10 +34,11 @@ wget -qO- https://raw.githubusercontent.com/subvhome/riven-tui/main/install_alpi
 ```
 
 ### Manual Setup
-1. `git clone https://github.com/subvhome/riven-tui.git`
-2. `pip install -r requirements.txt`
-3. `cp settings.json.example settings.json`
-4. `python riven_tui.py`
+1. Install **chafa** (system package) for image support.
+2. `git clone https://github.com/subvhome/riven-tui.git`
+3. `pip install -r requirements.txt`
+4. `cp settings.json.example settings.json`
+5. `python riven_tui.py`
 
 ## Screenshots
 
