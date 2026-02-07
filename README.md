@@ -10,15 +10,14 @@ Riven TUI turns your shell into a dedicated media kiosk, allowing you to discove
 
 ## Key Features
 
-- **Complete Web UI Replacement**: Manage your Riven lifecycle entirely from the terminal. Monitor server health, library statistics, and collection distribution at a glance.
-- **Frictionless Media Requesting**: A streamlined "Media Wall" powered by TMDB. Use the quick-add `[+]` button on trending items or deeper metadata cards to get content into your system instantly.
-- **Real-Time Library Governance**: Deep cross-referencing between TMDB and your Riven backend. Items are badged by their current pipeline state (e.g., *Completed, Scraped*). Features a new **Backup & Restore** suite for easy library migration.
-- **Dynamic Theme System**: Personalize your cockpit with built-in themes like **Dracula**, **Nord**, and **Gruvbox**. Cycle through them instantly with `Ctrl+Y`.
-- **Structural Matcher (Advanced View)**: A 3-column diagnostic tool that categorizes MDBList matches into **Root**, **Season**, and **Episode** buckets, ensuring only actionable items are processed in bulk.
-- **Integrated Maintenance Suite**: Power tools for collection cleanup. Multi-select items across your library to perform batch **Reset, Retry, Remove, Pause,** or **Unpause** tasks with safety confirmations.
-- **Transparent Troubleshooting**: A dedicated full-screen log viewer with real-time updates and a secure, redacted debug overlay (`Ctrl+T`). *Note: Existence probes are now silent and no longer flood backend logs with 404 errors.*
-- ~~**Manual Scrape Workflow**: Surgical stream discovery and file-to-episode mapping directly within the TUI.~~ *(Temporarily disabled)*
-- **Native Visual Experience**: High-resolution poster rendering using `chafa`.
+- **Complete Web UI Replacement**: Manage your full Riven lifecycle entirely from the terminal.
+- **Frictionless Media Requesting**: Streamlined "Media Wall" powered by TMDB with quick-add functionality.
+- **Real-Time Library Governance**: Deep cross-referencing between TMDB and Riven with badged pipeline states.
+- **Advanced Bulk Management**: Comprehensive MDBList support for mass additions and maintenance.
+- **Background Event Tracking**: Global log collection ensures you never miss a background task status.
+- **Dynamic Theming**: Instant theme switching with support for custom TCSS palettes.
+- **Maintenance Power Tools**: Selective batch processing and automated backup/restore suites.
+- **Native Visual Experience**: High-resolution poster rendering directly in your shell via `chafa`.
 
 ## Installation
 
@@ -60,14 +59,23 @@ wget -qO- https://raw.githubusercontent.com/subvhome/riven-tui/main/install_alpi
 
 ## ⚙️ Core Functionality
 
-### Instant Theme Cycling
-Switch themes on the fly by pressing **`Ctrl+Y`**. The TUI scans the `themes/` directory and applies new color palettes immediately, saving your preference to your settings.
-
-### Backup & Restore
-Located in the Advanced tab. **Backup** streams your library IDs to a JSON file in safe batches, while **Restore** performs a pre-import sync to skip duplicates and avoid backend errors.
+### MDBList Mass Manager
+Located in the Advanced tab. A powerful bulk tool for MDBList users:
+- **Surgical Probe**: Scans a list and categorizes results into **Library Items**, **Seasons**, **Episodes**, and **Missing**.
+- **Mass Add**: Queue and add hundreds of missing items in safe, throttled bursts (5 items every 2 seconds) to avoid backend flooding.
+- **Mass Cleanup**: Perform batch **Reset, Retry, or Delete** operations on matched items.
 
 ### Batch Tasks & Selection
-Select multiple items in the library view (using the mouse or Space) to trigger mass actions with integrated safety confirmations that list all affected titles.
+Power tools for collection cleanup. Select multiple items across your library view (using the mouse or Space) to trigger mass actions with integrated safety confirmations that list all affected titles.
+
+### Backup & Restore
+Safely migrate or archive your library. **Backup** streams your library IDs to a JSON file in safe batches, while **Restore** performs a pre-import sync to skip duplicates and avoid backend errors.
+
+### Global Background Logs
+A system-wide log collector that runs in the background. Toggle it with **`Ctrl+L`** to capture events while you work in other tabs. A visual status indicator in the header keeps you informed of background activity.
+
+### Instant Theme Cycling
+Personalize your cockpit instantly by pressing **`Ctrl+Y`**. The TUI scans the `themes/` directory and applies new color palettes on the fly, saving your preference automatically.
 
 ## Configuration
 

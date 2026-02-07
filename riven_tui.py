@@ -40,7 +40,6 @@ from modals import (
     StreamSelectionScreen, FileMappingScreen, ChafaCheckScreen,
     ConfirmationScreen
 )
-import subprocess
 import httpx
 
 NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
@@ -197,12 +196,15 @@ class RivenTUI(App):
     BINDINGS = [
         ("ctrl+t", "toggle_debug", "Debug"),
         ("ctrl+y", "cycle_theme", "Cycle Theme"),
+        ("ctrl+l", "toggle_background_logs", "Toggle Logs"),
     ]
 
-    base_title = reactive("Riven TUI") 
+    base_title = reactive(f"Riven TUI v{VERSION}") 
     app_state: Literal["welcome", "dashboard", "search", "library", "calendar", "settings", "advanced", "logs"] = reactive("dashboard")
     current_calendar_date = reactive(datetime.now())
     calendar_filters = reactive({"movie": True, "episode": True, "show": True, "season": True})
+    background_logs_enabled = reactive(False)
+    global_logs: List[str] = []
 
     def __init__(self):
         super().__init__()
@@ -217,6 +219,7 @@ class RivenTUI(App):
         self.previous_logs = ""
         self.chafa_available = False
         self.post_message_debounce_timer = None 
+        self.background_logs_timer: Optional[Timer] = None
         
         self.logger = logging.getLogger("Riven")
         self.tui_logger = logging.getLogger("Riven.TUI")
@@ -234,6 +237,84 @@ class RivenTUI(App):
 
     def log_message(self, message: str):
         self.tui_logger.info(message)
+
+    def watch_background_logs_enabled(self, enabled: bool) -> None:
+        # Revert footer binding to static text
+        self.bind("ctrl+l", "toggle_background_logs", description="Toggle Logs")
+        
+        # Update Logs Tab Button
+        try:
+            logs_btn = self.query_one("#btn-header-logs", MenuButton)
+            if enabled:
+                logs_btn.update("Logs [bold green]●[/]")
+            else:
+                logs_btn.update("Logs [dim]○[/]")
+        except NoMatches:
+            pass
+
+        # Sync checkbox in LogsView if it exists
+        try:
+            logs_view = self.query_one("LogsView")
+            checkbox = logs_view.query_one("#cb-logs-auto-refresh", Checkbox)
+            if checkbox.value != enabled:
+                checkbox.value = enabled
+        except NoMatches:
+            pass
+
+        if enabled:
+            interval = self.settings.get("log_refresh_interval", 5.0)
+            self.background_logs_timer = self.set_interval(interval, self.fetch_logs_worker)
+            self.run_worker(self.fetch_logs_worker()) # Trigger immediate fetch
+            self.log_message(f"Background logs enabled (Interval: {interval}s)")
+        else:
+            if self.background_logs_timer:
+                self.background_logs_timer.stop()
+                self.background_logs_timer = None
+            self.log_message("Background logs disabled")
+
+    async def fetch_logs_worker(self):
+        if not self.background_logs_enabled:
+            return
+            
+        riven_key = self.settings.get("riven_key")
+        logs, error = await self.api.get_direct_logs(riven_key)
+        
+        if error or logs is None:
+            return
+
+        # Simple overlap detection
+        new_lines = []
+        if not self.global_logs:
+            self.global_logs = logs
+            new_lines = logs
+        else:
+            last_line = self.global_logs[-1]
+            try:
+                idx = -1
+                for i in range(len(logs) - 1, -1, -1):
+                    if logs[i] == last_line:
+                        idx = i
+                        break
+                
+                new_lines = logs[idx+1:] if idx != -1 else logs
+                if new_lines:
+                    self.global_logs.extend(new_lines)
+            except Exception:
+                new_lines = logs
+                self.global_logs.extend(new_lines)
+
+        if new_lines:
+            # Limit buffer to 2000 lines
+            if len(self.global_logs) > 2000:
+                self.global_logs = self.global_logs[-2000:]
+            
+            # If user is in Logs view, trigger an update
+            if self.app_state == "logs":
+                try:
+                    logs_view = self.query_one(LogsView)
+                    logs_view.process_new_global_logs(new_lines)
+                except NoMatches:
+                    pass
 
     def reconfigure_redaction(self):
         redact_patterns = []
@@ -326,6 +407,11 @@ class RivenTUI(App):
             log_widget.toggle_class("-visible")
         except NoMatches:
             pass
+
+    def action_toggle_background_logs(self) -> None:
+        self.background_logs_enabled = not self.background_logs_enabled
+        status = "ENABLED" if self.background_logs_enabled else "DISABLED"
+        self.notify(f"Background Logs: {status}", severity="information")
 
     async def action_cycle_theme(self) -> None:
         """Cycles through available themes in the themes/ directory."""
@@ -451,6 +537,15 @@ class RivenTUI(App):
             self.log_message(f"Update check failed: {e}")
 
     async def on_mount(self) -> None:
+        # Initialize dynamic bindings
+        
+        # Initialize Logs Tab Label
+        try:
+            logs_btn = self.query_one("#btn-header-logs", MenuButton)
+            logs_btn.update("Logs [dim]○[/]")
+        except NoMatches:
+            pass
+
         # Setup unified logging in on_mount to ensure widgets are ready
         log_level_str = self.settings.get("log_level", "INFO").upper()
         log_level = getattr(logging, log_level_str, logging.INFO)
@@ -488,12 +583,6 @@ class RivenTUI(App):
         self.tui_logger.debug("perform_startup worker started")
         import os
         import shutil
-        if os.path.exists("y") and os.path.isdir("y"):
-            try:
-                shutil.rmtree("y")
-                self.log_message("Auto-Cleanup: Removed redundant 'y/' folder.")
-            except Exception as e:
-                self.tui_logger.error(f"Auto-Cleanup Error (y/): {e}", exc_info=True)
 
         if "api_key" in self.settings and "riven_key" not in self.settings:
             self.settings["riven_key"] = self.settings.pop("api_key")
@@ -669,7 +758,12 @@ class RivenTUI(App):
         # Update Tab Classes and Labels
         for btn in self.query(MenuButton):
             btn.remove_class("-active")
-            btn.update(btn.base_label)
+            if btn.id == "btn-header-logs":
+                # Preserve indicator state
+                indicator = "[bold green]●[/]" if self.background_logs_enabled else "[dim]○[/]"
+                btn.update(f"Logs {indicator}")
+            else:
+                btn.update(btn.base_label)
         
         try:
             target_id = f"#btn-header-{new_state}"
@@ -678,6 +772,10 @@ class RivenTUI(App):
             # Only show refresh icon on tabs that support re-click refresh
             if new_state in ["dashboard", "library", "calendar", "settings"]:
                 target_btn.update(f"{target_btn.base_label} [bold #F4D35E]↻[/]")
+            elif new_state == "logs":
+                 # Keep indicator for active logs tab
+                 indicator = "[bold green]●[/]" if self.background_logs_enabled else "[dim]○[/]"
+                 target_btn.update(f"Logs {indicator}")
             else:
                 target_btn.update(target_btn.base_label)
         except NoMatches:

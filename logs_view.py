@@ -4,14 +4,14 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import RichLog, Input, Button, Checkbox
 from textual.reactive import reactive
 from rich.markup import escape
+from typing import List
 
 class LogsView(Vertical):
     filter_query = reactive("")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.displayed_logs = []
-        self._refresh_timer = None
+        self.displayed_count = 0
 
     def compose(self) -> ComposeResult:
         yield RichLog(id="logs-display", wrap=True, highlight=True, markup=True)
@@ -20,6 +20,10 @@ class LogsView(Vertical):
             yield Button("Refresh", id="btn-logs-refresh", variant="primary")
             yield Checkbox("Auto Refresh", id="cb-logs-auto-refresh", value=False)
             yield Button("Clear", id="btn-logs-clear", variant="error")
+
+    def on_mount(self) -> None:
+        # Sync checkbox with global state
+        self.query_one("#cb-logs-auto-refresh", Checkbox).value = self.app.background_logs_enabled
 
     def _matches_filter(self, line: str) -> bool:
         if not self.filter_query:
@@ -75,7 +79,7 @@ class LogsView(Vertical):
     def watch_filter_query(self, new_query: str) -> None:
         log_widget = self.query_one("#logs-display", RichLog)
         log_widget.clear()
-        for line in self.displayed_logs:
+        for line in self.app.global_logs:
             if "GET /api/v1/logs" in line:
                 continue
             if self._matches_filter(line):
@@ -85,73 +89,44 @@ class LogsView(Vertical):
     def on_filter_changed(self, event: Input.Changed) -> None:
         self.filter_query = event.value.strip()
 
+    def process_new_global_logs(self, new_lines: List[str]):
+        """Called by the main app when new lines are added to global_logs."""
+        log_widget = self.query_one("#logs-display", RichLog)
+        for line in new_lines:
+            if "GET /api/v1/logs" in line:
+                continue
+            if self._matches_filter(line):
+                log_widget.write(self._style_line(line))
+
     async def update_logs(self, refresh_all: bool = False):
-        riven_key = self.app.settings.get("riven_key")
-        logs, error = await self.app.api.get_direct_logs(riven_key)
-        
-        if error:
-            self.app.notify(f"Error fetching logs: {error}", severity="error")
-            return
-
-        if logs is None:
-            logs = []
-
+        """Refreshes the view from the app's global_logs."""
         log_widget = self.query_one("#logs-display", RichLog)
         
         if refresh_all:
             log_widget.clear()
-            self.displayed_logs = []
-            # Apply display limit on initial load
-            limit = self.app.settings.get("log_display_limit", 50)
-            if len(logs) > limit:
-                logs = logs[-limit:]
-
-        # Find new logs
-        new_lines = []
-        if not self.displayed_logs:
-            new_lines = logs
-        else:
-            last_line = self.displayed_logs[-1]
-            try:
-                idx = -1
-                for i in range(len(logs) - 1, -1, -1):
-                    if logs[i] == last_line:
-                        idx = i
-                        break
+            # If global logs are empty, try to fetch immediately
+            if not self.app.global_logs:
+                await self.app.fetch_logs_worker()
                 
-                if idx != -1:
-                    new_lines = logs[idx+1:]
-                else:
-                    new_lines = logs
-            except Exception:
-                new_lines = logs
-
-        for line in new_lines:
-            if "GET /api/v1/logs" in line:
-                continue
-            
-            self.displayed_logs.append(line)
-            if self._matches_filter(line):
-                log_widget.write(self._style_line(line))
+            for line in self.app.global_logs:
+                if "GET /api/v1/logs" in line:
+                    continue
+                if self._matches_filter(line):
+                    log_widget.write(self._style_line(line))
+        else:
+            # Manual refresh also triggers a worker run to be sure
+            await self.app.fetch_logs_worker()
 
     @on(Button.Pressed, "#btn-logs-refresh")
     async def handle_refresh(self):
-        await self.update_logs()
+        await self.update_logs(refresh_all=True)
 
     @on(Button.Pressed, "#btn-logs-clear")
     def handle_clear(self):
         self.query_one("#logs-display", RichLog).clear()
-        self.displayed_logs = []
+        self.app.global_logs = []
 
     @on(Checkbox.Changed, "#cb-logs-auto-refresh")
     def handle_auto_refresh(self, event: Checkbox.Changed):
-        refresh_btn = self.query_one("#btn-logs-refresh", Button)
-        if event.value:
-            refresh_btn.disabled = True
-            interval = self.app.settings.get("log_refresh_interval", 5.0)
-            self._refresh_timer = self.set_interval(interval, self.update_logs)
-        else:
-            refresh_btn.disabled = False
-            if self._refresh_timer:
-                self._refresh_timer.stop()
-                self._refresh_timer = None
+        self.app.background_logs_enabled = event.value
+
