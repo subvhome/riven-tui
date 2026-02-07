@@ -409,8 +409,11 @@ class AdvancedView(Vertical):
                         target_id = item.get("tmdbid") or item.get("tmdb_id")
                         # Fallback to resolving via IMDB if TMDB is missing
                         if not target_id and item.get("imdb_id"):
-                            # This is a bit slow but necessary if MDBList lacks TMDB ID
-                            pass # For now assume MDBList provides it or we skip
+                            tmdb_token = self.app.settings.get("tmdb_bearer_token")
+                            if tmdb_token:
+                                found_id, _ = await self.app.api.find_tmdb_id(item["imdb_id"], "imdb_id", tmdb_token)
+                                if found_id:
+                                    target_id = found_id
                     else:
                         target_id = item.get("tvdbid") or item.get("tvdb_id")
                     
