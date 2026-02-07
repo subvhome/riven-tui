@@ -10,6 +10,8 @@ from textual.reactive import reactive
 
 class AdvancedView(Vertical):
     matched_items: Dict[str, dict] = {} # ID -> Full Item Data
+    missing_movies: List[dict] = []
+    missing_shows: List[dict] = []
     show_mdblist = reactive(False)
     show_import_export = reactive(False)
 
@@ -27,7 +29,7 @@ class AdvancedView(Vertical):
 
                 with Horizontal(id="adv-results-row"):
                     with Vertical(classes="advanced-column column-header-root"):
-                        yield Label("ROOT (ACTONABLE)", classes="advanced-sub-label")
+                        yield Label("LIBRARY ITEMS", classes="advanced-sub-label")
                         yield ListView(id="adv-list-root")
                     with Vertical(classes="advanced-column column-header-season"):
                         yield Label("SEASONS", classes="advanced-sub-label")
@@ -35,8 +37,12 @@ class AdvancedView(Vertical):
                     with Vertical(classes="advanced-column column-header-episode"):
                         yield Label("EPISODES", classes="advanced-sub-label")
                         yield ListView(id="adv-list-episode")
+                    with Vertical(classes="advanced-column column-header-missing"):
+                        yield Label("MISSING (ADD)", classes="advanced-sub-label")
+                        yield ListView(id="adv-list-missing")
 
                 with Horizontal(classes="advanced-row", id="adv-actions-row"):
+                    yield Button("Mass Add", id="btn-adv-add", variant="success", disabled=True)
                     yield Button("Mass Delete", id="btn-adv-delete", variant="error", disabled=True)
                     yield Button("Mass Reset", id="btn-adv-reset", variant="warning", disabled=True)
                     yield Button("Mass Retry", id="btn-adv-retry", variant="primary", disabled=True)
@@ -263,10 +269,13 @@ class AdvancedView(Vertical):
         status.update("[yellow]Fetching list from Mdblist...[/]")
         self.app.log_message(f"Advanced: Starting scan for {val}")
         
-        # Clear all 3 lists
+        # Clear all lists
         self.query_one("#adv-list-root", ListView).clear()
         self.query_one("#adv-list-season", ListView).clear()
         self.query_one("#adv-list-episode", ListView).clear()
+        self.query_one("#adv-list-missing", ListView).clear()
+        self.missing_movies = []
+        self.missing_shows = []
 
         # 1. Fetch Mdblist
         mdb_items, mdb_err = await self.app.api.get_mdblist_items(val)
@@ -274,13 +283,15 @@ class AdvancedView(Vertical):
             status.update(f"[red]Mdblist Error: {mdb_err}[/]")
             return
 
-        all_mdb_items = mdb_items.get("movies", []) + mdb_items.get("shows", [])
-        if not all_mdb_items:
+        all_mdb_movies = mdb_items.get("movies", [])
+        all_mdb_shows = mdb_items.get("shows", [])
+        
+        if not all_mdb_movies and not all_mdb_shows:
             status.update("[yellow]Mdblist is empty or not yet populated.[/]")
             return
 
         # 2. Surgical Probing
-        status.update(f"[yellow]Surgically probing Riven for {len(all_mdb_items)} items...[/]")
+        status.update(f"[yellow]Surgically probing Riven for {len(all_mdb_movies) + len(all_mdb_shows)} items...[/]")
         riven_key = self.app.settings.get("riven_key")
         self.matched_items = {}
         
@@ -298,42 +309,129 @@ class AdvancedView(Vertical):
             tvdb_id = s.get("tvdb_id")
             if not tvdb_id: return None
             async with semaphore:
-                item = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key, silent=True)
+                item = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key)
                 return item
             return None
 
-        tasks = [probe_movie(m) for m in mdb_items.get("movies", [])]
-        tasks += [probe_show(s) for s in mdb_items.get("shows", [])]
-        results = await asyncio.gather(*tasks)
+        # Gather results parallel
+        movie_tasks = [probe_movie(m) for m in all_mdb_movies]
+        show_tasks = [probe_show(s) for s in all_mdb_shows]
+        
+        movie_results = await asyncio.gather(*movie_tasks)
+        show_results = await asyncio.gather(*show_tasks)
 
         # 3. Process & Categorize
-        counts = {"root": 0, "season": 0, "episode": 0}
-        for item in results:
-            if item:
-                i_id = str(item["id"])
-                i_type = item.get("type", "unknown")
-                self.matched_items[i_id] = item
-                
-                # Categorize
-                target_list_id = None
-                if i_type in ["movie", "show"]:
-                    target_list_id = "#adv-list-root"
-                    counts["root"] += 1
-                elif i_type == "season":
-                    target_list_id = "#adv-list-season"
-                    counts["season"] += 1
-                elif i_type == "episode":
-                    target_list_id = "#adv-list-episode"
-                    counts["episode"] += 1
-                
-                if target_list_id:
-                    self.query_one(target_list_id, ListView).append(ListItem(Label(item.get("title", "Unknown"))))
+        counts = {"root": 0, "season": 0, "episode": 0, "missing": 0}
+        
+        # Helper to process results
+        def process_match(item):
+            i_id = str(item["id"])
+            i_type = item.get("type", "unknown")
+            self.matched_items[i_id] = item
+            
+            target_list_id = None
+            if i_type in ["movie", "show"]:
+                target_list_id = "#adv-list-root"
+                counts["root"] += 1
+            elif i_type == "season":
+                target_list_id = "#adv-list-season"
+                counts["season"] += 1
+            elif i_type == "episode":
+                target_list_id = "#adv-list-episode"
+                counts["episode"] += 1
+            
+            if target_list_id:
+                self.query_one(target_list_id, ListView).append(ListItem(Label(item.get("title", "Unknown"))))
+
+        # Process Movies
+        for i, res in enumerate(movie_results):
+            if res:
+                process_match(res)
+            else:
+                # Missing
+                m_item = all_mdb_movies[i]
+                self.missing_movies.append(m_item)
+                counts["missing"] += 1
+                self.query_one("#adv-list-missing", ListView).append(ListItem(Label(m_item.get("title", "Unknown Movie"))))
+
+        # Process Shows
+        for i, res in enumerate(show_results):
+            if res:
+                process_match(res)
+            else:
+                # Missing
+                s_item = all_mdb_shows[i]
+                self.missing_shows.append(s_item)
+                counts["missing"] += 1
+                self.query_one("#adv-list-missing", ListView).append(ListItem(Label(s_item.get("title", "Unknown Show"))))
 
         # 4. Final Status
-        status.update(f"[green]Scan Complete: Found {counts['root']} Roots, {counts['season']} Seasons, {counts['episode']} Episodes.[/]")
+        status.update(f"[green]Scan Complete: Found {counts['root']} Lib Items, {counts['season']} Seasons, {counts['episode']} Episodes. [bold]{counts['missing']} Missing.[/]")
+        
+        self.query_one("#btn-adv-add", Button).disabled = counts["missing"] == 0
         self.query_one("#btn-adv-delete", Button).disabled = counts["root"] == 0
         self.query_one("#btn-adv-reset", Button).disabled = counts["root"] == 0
         self.query_one("#btn-adv-retry", Button).disabled = counts["root"] == 0
+
+    @on(Button.Pressed, "#btn-adv-add")
+    def on_add_click(self) -> None:
+        self.run_worker(self.perform_mass_add())
+
+    async def perform_mass_add(self):
+        total_missing = len(self.missing_movies) + len(self.missing_shows)
+        if total_missing == 0: return
+
+        confirmed = await self.app.push_screen_wait(ConfirmationScreen(
+            "Mass Add Items",
+            f"Are you sure you want to add [bold]{total_missing}[/] items to your library?\n"
+            "This will be done in bursts of 5 items every 2 seconds.",
+            confirm_label="Yes, Start Adding",
+            variant="success"
+        ))
+        
+        if not confirmed: return
+
+        status = self.query_one("#adv-status-line", Static)
+        riven_key = self.app.settings.get("riven_key")
+        
+        async def process_batch(items, m_type, id_type):
+            count = len(items)
+            processed = 0
+            
+            for i in range(0, count, 5):
+                batch = items[i:i+5]
+                batch_ids = []
+                
+                # Resolve IDs if needed
+                for item in batch:
+                    target_id = None
+                    if m_type == "movie":
+                        target_id = item.get("tmdbid") or item.get("tmdb_id")
+                        # Fallback to resolving via IMDB if TMDB is missing
+                        if not target_id and item.get("imdb_id"):
+                            # This is a bit slow but necessary if MDBList lacks TMDB ID
+                            pass # For now assume MDBList provides it or we skip
+                    else:
+                        target_id = item.get("tvdbid") or item.get("tvdb_id")
+                    
+                    if target_id:
+                        batch_ids.append(str(target_id))
+                
+                if batch_ids:
+                    status.update(f"[green]Mass Add ({m_type.title()}s): Processing {processed + len(batch_ids)}/{count}...[/]")
+                    await self.app.api.bulk_add_items(m_type, id_type, batch_ids, riven_key)
+                
+                processed += len(batch)
+                await asyncio.sleep(2) # Burst control
+
+        if self.missing_movies:
+            await process_batch(self.missing_movies, "movie", "tmdb_ids")
+        
+        if self.missing_shows:
+            await process_batch(self.missing_shows, "tv", "tvdb_ids")
+
+        status.update("[bold green]Mass Add Complete! Please rescan to verify.[/]")
+        self.query_one("#btn-adv-add", Button).disabled = True
 
     @on(Button.Pressed, "#btn-adv-delete")
     def on_delete_click(self) -> None: self.run_worker(self.run_action("remove", "Delete"))

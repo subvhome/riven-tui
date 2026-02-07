@@ -1363,6 +1363,7 @@ ListItem:focus .search-item-meta {
 .column-header-root { border-top: thick #6A994E; }
 .column-header-season { border-top: thick $error; }
 .column-header-episode { border-top: thick $error; }
+.column-header-missing { border-top: thick $success; }
 
 #adv-matched-list {
     background: transparent;
