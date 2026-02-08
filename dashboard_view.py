@@ -117,7 +117,7 @@ class DashboardView(Vertical):
             rating = f" [#D4AF37]{rating_val:.1f}[/]" if rating_val > 0 else ""
 
             media_type = item.get("type", "movie")
-            icon = "🎞️ " if media_type == "movie" else "📺"
+            icon = "🎬" if media_type == "movie" else "📺"
             
             await tile.mount(self.DashboardItem(f"{icon} {title}{year}{rating}", item, source="library", show_add=False))
 
@@ -138,7 +138,7 @@ class DashboardView(Vertical):
             rating = f" [#D4AF37]{rating_val:.1f}[/]" if rating_val > 0 else ""
 
             media_type = item.get("media_type", "movie")
-            icon = "🎞️ " if media_type == "movie" else "📺"
+            icon = "🎬" if media_type == "movie" else "📺"
             
             tmdb_id = str(item.get("id"))
             # Check if this item is in library
@@ -252,7 +252,7 @@ class DashboardView(Vertical):
         shows = stats.get("total_shows", 0)
         episodes = stats.get("total_episodes", 0)
         
-        stats_label.update(f"🎬 [bold]{movies}[/] Movies   📺 [bold]{shows}[/] Shows   🎞️ [bold]{episodes}[/] Episodes")
+        stats_label.update(f"🎬 [bold]{movies}[/] Movies   📺 [bold]{shows}[/] Shows   🎬 [bold]{episodes}[/] Episodes")
         
         if health_ok:
             health_label.update("API: [bold green]ONLINE[/]")

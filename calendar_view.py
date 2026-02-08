@@ -21,7 +21,7 @@ class CalendarItemCard(Horizontal):
         i_type = self.item_data.get("item_type", "unknown")
         icon = "📺" 
         if i_type == "movie": 
-            icon = "🎞️"
+            icon = "🎬"
             
         with Vertical(classes="calendar-card-icon"):
             yield Label(icon)
