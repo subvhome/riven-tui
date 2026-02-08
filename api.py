@@ -1,6 +1,7 @@
 import httpx
 import asyncio
 import logging
+import os
 from typing import List, Optional
 
 class RivenAPI:
@@ -386,11 +387,19 @@ class RivenAPI:
                 if height:
                     size_arg = f"{width}x{height}"
 
+                # Use a sanitized environment to prevent system variables from overriding our format
+                env = os.environ.copy()
+                env["TERM"] = "xterm-256color"  # Force a standard terminal type
+                env.pop("CHAFA_FORMAT", None)   # Remove any format override
+                env.pop("COLORTERM", None)      # Remove colorterm which might trigger detection
+                env.pop("XDG_SESSION_TYPE", None) # Remove session type
+
                 chafa_process = await asyncio.create_subprocess_exec(
-                    "chafa", "--size", size_arg, "--colors", "256", "-",
+                    "chafa", "--format", "symbols", "--size", size_arg, "--colors", "256", "-",
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env
                 )
 
                 async for chunk in response.aiter_bytes():
