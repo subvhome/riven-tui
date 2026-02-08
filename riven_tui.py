@@ -42,7 +42,7 @@ from modals import (
 )
 import httpx
 
-NOTIFICATION_CLEAR_DELAY = 10.0 # Seconds
+NOTIFICATION_CLEAR_DELAY = 3.0 # Seconds
 
 class TitleSpinner:
     SPINNER_FRAMES = ['⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷']
@@ -401,6 +401,9 @@ class RivenTUI(App):
             return f"{protocol}://{host}:{port}"
         return f"{protocol}://{host}"
         
+    def notify(self, message: str, *args, title: str = "", severity: Literal["information", "warning", "error"] = "information", timeout: float = NOTIFICATION_CLEAR_DELAY, **kwargs) -> None:
+        super().notify(message, *args, title=title, severity=severity, timeout=timeout, **kwargs)
+
     def action_toggle_debug(self) -> None:
         try:
             log_widget = self.query_one("#debug-log")

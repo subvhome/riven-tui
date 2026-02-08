@@ -1,11 +1,11 @@
-/* Windows 3.11 - Hot Dog Stand / Legacy */
-$background: #008080;
-$surface: #C0C0C0;
-$panel: #FFFFFF;
-$foreground: #000000;
-$primary: #000080;
-$secondary: #808080;
-$accent: #FF0000;
-$success: #008000;
-$warning: #FFFF00;
-$error: #FF0000;
+/* Windows 3.11 - High Contrast / Console Mode */
+$background: #008080;  /* Teal Desktop */
+$surface: #000080;     /* Navy Blue (Like Active Title Bars) */
+$panel: #C0C0C0;       /* Silver (Menu Bars/Borders) */
+$foreground: #FFFFFF;  /* White Text (Readable on dark columns) */
+$primary: #00FFFF;     /* Cyan (High Contrast Selection) */
+$secondary: #FFFF00;   /* Yellow (Labels/Headers - Pops on Teal) */
+$accent: #FF0000;      /* Red (Errors/Highlights) */
+$success: #008000;     /* Green */
+$warning: #FFFF00;     /* Yellow */
+$error: #FF0000;       /* Red */
