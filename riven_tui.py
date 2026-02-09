@@ -272,8 +272,8 @@ class RivenTUI(App):
                 self.background_logs_timer = None
             self.log_message("Background logs disabled")
 
-    async def fetch_logs_worker(self):
-        if not self.background_logs_enabled:
+    async def fetch_logs_worker(self, force: bool = False):
+        if not self.background_logs_enabled and not force:
             return
             
         riven_key = self.settings.get("riven_key")
@@ -304,9 +304,10 @@ class RivenTUI(App):
                 self.global_logs.extend(new_lines)
 
         if new_lines:
-            # Limit buffer to 2000 lines
-            if len(self.global_logs) > 2000:
-                self.global_logs = self.global_logs[-2000:]
+            # Limit buffer to configured max lines
+            max_lines = self.settings.get("max_log_lines", 2000)
+            if len(self.global_logs) > max_lines:
+                self.global_logs = self.global_logs[-max_lines:]
             
             # If user is in Logs view, trigger an update
             if self.app_state == "logs":

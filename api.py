@@ -267,10 +267,19 @@ class RivenAPI:
     async def get_logs_from_url(self, url: str):
         self.logger.info(f"get_logs_from_url: URL={url}")
         try:
-            resp = await self.client.get(url)
-            if resp.status_code == 200:
-                return resp.text, None
-            return None, f"Status: {resp.status_code}, Body: {resp.text}"
+            async with self.client.stream("GET", url) as response:
+                if response.status_code == 200:
+                    data = []
+                    size = 0
+                    limit = 5 * 1024 * 1024 # 5MB limit
+                    async for chunk in response.aiter_text():
+                        data.append(chunk)
+                        size += len(chunk.encode('utf-8'))
+                        if size > limit:
+                            data.append("\n... [Logs truncated due to size] ...")
+                            break
+                    return "".join(data), None
+                return None, f"Status: {response.status_code}"
         except Exception as e:
             return None, str(e)
 

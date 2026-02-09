@@ -14,7 +14,8 @@ class LogsView(Vertical):
         self.displayed_count = 0
 
     def compose(self) -> ComposeResult:
-        yield RichLog(id="logs-display", wrap=False, highlight=True, markup=True)
+        # Use a safe default for max_lines, but it will be updated in on_mount from settings
+        yield RichLog(id="logs-display", wrap=False, highlight=True, markup=True, max_lines=2000)
         with Horizontal(id="logs-controls"):
             yield Input(placeholder="Filter logs (use ! to exclude)...", id="logs-filter-input")
             yield Button("Refresh", id="btn-logs-refresh", variant="primary")
@@ -24,6 +25,10 @@ class LogsView(Vertical):
     def on_mount(self) -> None:
         # Sync checkbox with global state
         self.query_one("#cb-logs-auto-refresh", Checkbox).value = self.app.background_logs_enabled
+        
+        # Apply max_lines from settings
+        max_lines = self.app.settings.get("max_log_lines", 2000)
+        self.query_one("#logs-display", RichLog).max_lines = max_lines
 
     def _matches_filter(self, line: str) -> bool:
         if not self.filter_query:
@@ -104,9 +109,8 @@ class LogsView(Vertical):
         
         if refresh_all:
             log_widget.clear()
-            # If global logs are empty, try to fetch immediately
-            if not self.app.global_logs:
-                await self.app.fetch_logs_worker()
+            # Always force fetch on manual refresh
+            await self.app.fetch_logs_worker(force=True)
                 
             for line in self.app.global_logs:
                 if "GET /api/v1/logs" in line:
@@ -115,7 +119,7 @@ class LogsView(Vertical):
                     log_widget.write(self._style_line(line))
         else:
             # Manual refresh also triggers a worker run to be sure
-            await self.app.fetch_logs_worker()
+            await self.app.fetch_logs_worker(force=True)
 
     @on(Button.Pressed, "#btn-logs-refresh")
     async def handle_refresh(self):
