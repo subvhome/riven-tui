@@ -115,10 +115,10 @@ class DashboardView(Vertical):
         self.query_one("#db-states-frame").border_title = "LIBRARY STATES"
 
     def on_resize(self) -> None:
-        if self.size.width < 100:
-            self.add_class("-stacked")
-        else:
-            self.remove_class("-stacked")
+        # Multi-tier responsiveness
+        width = self.size.width
+        self.set_class(width < 100, "-stacked")
+        self.set_class(width < 70, "-compact")
 
     async def update_recently_added(self, items: list, ratings: dict = None):
         for i in range(10):

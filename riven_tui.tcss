@@ -1748,6 +1748,15 @@ center column */
     grid-size: 3;
 }
 
+/* Extreme narrow mode */
+#dashboard-view.-compact #db-service-pills {
+    grid-size: 2;
+}
+
+#dashboard-view.-compact #db-states-grid {
+    grid-size: 1;
+}
+
 #db-pills-frame {
     height: auto;
     margin-top: 2;
