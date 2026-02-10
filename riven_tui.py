@@ -560,7 +560,10 @@ class RivenTUI(App):
                         try:
                             if version_tuple(remote_version) > version_tuple(VERSION):
                                 import os
-                                is_git = os.path.isdir(".git")
+                                # Robust git detection: check script's directory for .git
+                                script_dir = os.path.dirname(os.path.abspath(__file__))
+                                is_git = os.path.isdir(os.path.join(script_dir, ".git"))
+                                
                                 self.push_screen(UpdateScreen(remote_version, is_git_repo=is_git))
                                 self.log_message(f"Update found: Local {VERSION} vs Remote {remote_version}")
                         except Exception as e:
