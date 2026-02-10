@@ -1740,6 +1740,14 @@ center column */
     margin: 0 0 2 0;
 }
 
+#dashboard-view.-stacked #db-service-pills {
+    grid-size: 3;
+}
+
+#dashboard-view.-stacked #db-states-grid {
+    grid-size: 3;
+}
+
 #db-pills-frame {
     height: auto;
     margin-top: 2;
