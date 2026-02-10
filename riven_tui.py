@@ -1,5 +1,7 @@
 import json
 import asyncio
+import os
+import gc
 import math
 import calendar
 from datetime import datetime
@@ -237,6 +239,30 @@ class RivenTUI(App):
 
     def log_message(self, message: str):
         self.tui_logger.info(message)
+
+    def get_mem_usage(self) -> str:
+        """Reads /proc/self/status to get current RSS memory usage (Linux)."""
+        gc.collect()
+        try:
+            with open("/proc/self/status", "r") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        kb = int(line.split(":")[1].strip().split()[0])
+                        if kb > 1024 * 1024:
+                            return f"{kb / (1024*1024):.2f} GB"
+                        return f"{kb / 1024:.1f} MB"
+        except Exception:
+            pass
+        return "N/A"
+
+    def update_ram_display(self) -> None:
+        """Updates the header RAM widget with current usage."""
+        try:
+            ram_widget = self.query_one("#header-ram", Static)
+            usage = self.get_mem_usage()
+            ram_widget.update(f"RAM: [bold]{usage}[/]")
+        except Exception:
+            pass
 
     def watch_background_logs_enabled(self, enabled: bool) -> None:
         # Revert footer binding to static text
@@ -492,7 +518,9 @@ class RivenTUI(App):
             yield MenuButton("Calendar", id="btn-header-calendar")
             yield MenuButton("Settings", id="btn-header-settings")
             yield MenuButton("Logs", id="btn-header-logs")
-            yield Static(self.base_title, id="header-title")
+            with Vertical(id="header-info-area"):
+                yield Static(self.base_title, id="header-title")
+                yield Static("RAM: ---", id="header-ram")
 
         with Container(id="workspace"):
             with Vertical(id="dashboard-wrapper"):
@@ -581,6 +609,11 @@ class RivenTUI(App):
 
         self.tui_logger.debug("on_mount called")
         self.log_message("App mounted. Starting startup worker.")
+        
+        # Start RAM usage update timer
+        self.set_interval(5.0, self.update_ram_display)
+        self.update_ram_display() # Initial update
+        
         self.run_worker(self.perform_startup())
 
     async def perform_startup(self) -> None:
