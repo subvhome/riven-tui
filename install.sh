@@ -55,8 +55,10 @@ fi
 echo -e "${YELLOW}[2/6] Setting up installation directory...${NC}"
 DEFAULT_DIR="$HOME/riven-tui"
 echo -n "Where should I install Riven TUI? [Default: $DEFAULT_DIR]: "
+echo -e "${BLUE}DEBUG: Prompting for install directory.${NC}"
 read INSTALL_DIR < /dev/tty
 INSTALL_DIR=${INSTALL_DIR:-$DEFAULT_DIR}
+echo -e "${BLUE}DEBUG: INSTALL_DIR set to: $INSTALL_DIR${NC}"
 
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${YELLOW}Directory $INSTALL_DIR already exists.${NC}"
@@ -69,11 +71,14 @@ if [ -d "$INSTALL_DIR" ]; then
     rm -rf "$INSTALL_DIR"
 fi
 
+echo -e "${BLUE}DEBUG: Creating directory: $INSTALL_DIR${NC}"
 mkdir -p "$INSTALL_DIR"
+echo -e "${BLUE}DEBUG: Changing directory to: $INSTALL_DIR${NC}"
 cd "$INSTALL_DIR"
 
 # 3. Clone Repository
 echo -e "${YELLOW}[3/6] Cloning Riven TUI from GitHub...${NC}"
+echo -e "${BLUE}DEBUG: Starting git clone.${NC}"
 git clone https://github.com/subvhome/riven-tui.git .
 
 # 4. Virtual Environment & Dependencies
