@@ -8,37 +8,33 @@ Riven TUI turns your shell into a dedicated media kiosk, allowing you to discove
   <img src="assets/riven-tui.gif" width="85%" />
 </p>
 
-## Key Features
+## ⚙️ Features & Core Functionality
 
 - **Complete Web UI Replacement**: Manage your full Riven lifecycle entirely from the terminal.
-- **Frictionless Media Requesting**: Streamlined "Media Wall" powered by TMDB with quick-add functionality.
-- **Real-Time Library Governance**: Deep cross-referencing between TMDB and Riven with badged pipeline states.
-- **Advanced Bulk Management**: Comprehensive MDBList support for mass additions and maintenance.
-- **Background Event Tracking**: Global log collection ensures you never miss a background task status.
-- **Dynamic Theming**: Instant theme switching with support for custom TCSS palettes.
-- **Maintenance Power Tools**: Selective batch processing and automated backup/restore suites.
-- **Native Visual Experience**: High-resolution poster rendering directly in your shell via `chafa`.
+- **The Media Wall (Search Grid)**: A robust 4-column layout designed for speed. Features intelligent coordinate-based hover logic to prevent flickering and automatically clears high-density images from memory when you move your mouse away.
+- **Universal Multi-OS Support**: Native support for Debian/Ubuntu, Fedora, Arch, Alpine Linux, and macOS via a single installer.
+- **Absolute Path Integrity**: Built for reliability in environments like unRAID or when using aliases. The app uses absolute path resolution to ensure `settings.json`, logs, and themes are found regardless of your current directory.
+- **Advanced MDBList Management**: Probes MDBLists with real-time progress indicators, categorizing items into Roots, Seasons, Episodes, and Missing with throttled mass-add capabilities.
+- **Seamless Auto-Updates**: One-click in-app updates that automatically handle git resets and dependency synchronizations.
+- **Global Background Logs**: A background log collector toggled via **`Ctrl+L`** with a visual status indicator in the header.
+- **Dynamic Theming**: Instant theme cycling with **`Ctrl+Y`**, supporting custom TCSS palettes located in the `themes/` directory.
 
 ## Installation
 
-### Standard Linux (Debian, Ubuntu, Fedora, Arch, macOS)
-Supports most distributions using `apt`, `dnf`, `pacman`, or `brew`.
-```bash
-curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh | bash
-```
+### Universal Setup (Recommended)
+Automatically installs system dependencies (`chafa`, `git`, `python3-venv`), sets up the virtual environment, and configures a terminal alias.
 
-### Alpine Linux
-Pure POSIX-compliant installer optimized for Alpine's `apk` and `ash` shell.
 ```bash
-wget -qO- https://raw.githubusercontent.com/subvhome/riven-tui/main/install_alpine.sh | sh
+curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh | sh
 ```
 
 ### Manual Setup
 1. Install **chafa** (system package) for image support.
 2. `git clone https://github.com/subvhome/riven-tui.git`
-3. `pip install -r requirements.txt`
-4. `cp settings.json.example settings.json`
-5. `python riven_tui.py`
+3. `cd riven-tui && python3 -m venv .venv && source .venv/bin/activate`
+4. `pip install -r requirements.txt`
+5. `cp settings.json.example settings.json`
+6. `python riven_tui.py`
 
 ## Screenshots
 
@@ -58,34 +54,16 @@ wget -qO- https://raw.githubusercontent.com/subvhome/riven-tui/main/install_alpi
 | :---: | :---: |
 | ![Logs](assets/logs.jpg) | ![Debug Window](assets/debug-window.jpg) |
 
-## ⚙️ Core Functionality
-
-### MDBList Mass Manager
-Located in the Advanced tab. A powerful bulk tool for MDBList users:
-- **Surgical Probe**: Scans a list and categorizes results into **Library Items**, **Seasons**, **Episodes**, and **Missing**.
-- **Mass Add**: Queue and add hundreds of missing items in safe, throttled bursts (5 items every 2 seconds) to avoid backend flooding.
-- **Mass Cleanup**: Perform batch **Reset, Retry, or Delete** operations on matched items.
-
-### Batch Tasks & Selection
-Power tools for collection cleanup. Select multiple items across your library view (using the mouse or Space) to trigger mass actions with integrated safety confirmations that list all affected titles.
-
-### Backup & Restore
-Safely migrate or archive your library. **Backup** streams your library IDs to a JSON file in safe batches, while **Restore** performs a pre-import sync to skip duplicates and avoid backend errors.
-
-### Global Background Logs
-A system-wide log collector that runs in the background. Toggle it with **`Ctrl+L`** to capture events while you work in other tabs. A visual status indicator in the header keeps you informed of background activity.
-
-### Instant Theme Cycling
-Personalize your cockpit instantly by pressing **`Ctrl+Y`**. The TUI scans the `themes/` directory and applies new color palettes on the fly, saving your preference automatically.
-
 ## Configuration
 
-Settings are managed in `settings.json` or via the in-app **Settings Tree**:
+Configuration is stored in `settings.json`. The app uses absolute pathing to ensure this file is always loaded correctly from the installation directory:
 
 - `riven_key`: Your Riven API key.
 - `tmdb_bearer_token`: TMDB Read Access Token.
-- `theme`: The name of the active theme (e.g., `dracula`, `nord`, `default`).
-- `chafa_max_width`: Maximum width for rendered media posters.
+- `be_config`: Dictionary containing protocol, host, and port for your Riven backend.
+- `theme`: The active theme name (e.g., `dracula`, `nord`, `default`).
+- `chafa_max_width`: Maximum character width for rendered media posters.
+- `request_timeout`: Global timeout for API requests.
 
 ---
 Built with [Textual](https://github.com/Textualize/textual).

@@ -3,10 +3,12 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Static, Label, ListView, ListItem, Button, Input, Select, Checkbox
 from textual.message import Message
 from textual import on
+from textual.reactive import reactive
 from typing import List, Dict
 import calendar
 from search import SearchArea
 from messages import PageChanged
+from search_results import SelectionSquare
 
 class ApplyFilters(Message):
     pass
@@ -43,7 +45,60 @@ class TypePill(Static):
         self.value = not self.value
         self.set_class(self.value, "-active")
 
+class StateListItem(ListItem):
+    selected = reactive(False)
+    
+    class Changed(Message):
+        def __init__(self, item: "StateListItem") -> None:
+            self.item = item
+            super().__init__()
+
+    def __init__(self, label: str, value: str | None, initial_selected: bool = False) -> None:
+        super().__init__(classes="state-list-item")
+        self.label_text = label
+        self.value = value
+        self.selected = initial_selected
+
+    def compose(self) -> ComposeResult:
+        yield SelectionSquare(self.selected)
+        yield Label(self.label_text)
+
+    def watch_selected(self, value: bool) -> None:
+        self.set_class(value, "-selected")
+        try:
+            self.query_one(SelectionSquare).update_value(value)
+        except:
+            pass
+
+    def on_click(self) -> None:
+        self.selected = not self.selected
+        self.post_message(self.Changed(self))
+
 class Sidebar(Container):
+    @on(StateListItem.Changed)
+    def on_state_changed(self, event: StateListItem.Changed):
+        items = self.query(StateListItem)
+        changed_item = event.item
+        
+        if changed_item.value is None: # "All" was toggled
+            if changed_item.selected:
+                # Deselect everything else
+                for item in items:
+                    if item != changed_item:
+                        item.selected = False
+        else: # A specific state was toggled
+            if changed_item.selected:
+                # Deselect "All"
+                for item in items:
+                    if item.value is None:
+                        item.selected = False
+        
+        # Ensure at least "All" is selected if nothing else is
+        if not any(item.selected for item in items):
+            for item in items:
+                if item.value is None:
+                    item.selected = True
+
     @on(Input.Submitted, "#lib-filter-search")
     def on_search_submitted(self):
         self.post_message(ApplyFilters())
@@ -67,21 +122,20 @@ class Sidebar(Container):
                     yield TypePill("Anime", False, "anime")
                 
                 yield Label("States:")
-                yield Select([
-                    ("All", None),
-                    ("Unknown", "Unknown"),
-                    ("Unreleased", "Unreleased"),
-                    ("Ongoing", "Ongoing"),
-                    ("Requested", "Requested"),
-                    ("Indexed", "Indexed"),
-                    ("Scraped", "Scraped"),
-                    ("Downloaded", "Downloaded"),
-                    ("Symlinked", "Symlinked"),
-                    ("Completed", "Completed"),
-                    ("Partially Completed", "PartiallyCompleted"),
-                    ("Failed", "Failed"),
-                    ("Paused", "Paused")
-                ], prompt="States", id="lib-filter-states", allow_blank=False, value=None)
+                with ListView(id="lib-filter-states-list"):
+                    yield StateListItem("All", None, initial_selected=True)
+                    yield StateListItem("Unknown", "Unknown")
+                    yield StateListItem("Unreleased", "Unreleased")
+                    yield StateListItem("Ongoing", "Ongoing")
+                    yield StateListItem("Requested", "Requested")
+                    yield StateListItem("Indexed", "Indexed")
+                    yield StateListItem("Scraped", "Scraped")
+                    yield StateListItem("Downloaded", "Downloaded")
+                    yield StateListItem("Symlinked", "Symlinked")
+                    yield StateListItem("Completed", "Completed")
+                    yield StateListItem("Partially Completed", "PartiallyCompleted")
+                    yield StateListItem("Failed", "Failed")
+                    yield StateListItem("Paused", "Paused")
 
                 yield Label("Sort:")
                 yield Select([
@@ -99,7 +153,7 @@ class Sidebar(Container):
             with Horizontal(classes="separator-row"):
                 yield Button("<<", id="btn-prev-page", classes="blue-separator")
                 yield Static("1 of 1", id="sidebar-page-label", classes="red-separator")
-                yield Button(">>", id="btn-next-page", classes="blue-separator")
+                yield Button(" >>", id="btn-next-page", classes="blue-separator")
 
             with Horizontal(id="sidebar-actions-row"):
                 yield Button("Apply\nFilters", id="btn-apply-filters", classes="sidebar-action-btn")
@@ -187,19 +241,9 @@ class Sidebar(Container):
             
         self.update_selection_count(selected_count, total_items)
 
-    def update_selection_count(self, selected: int, total: int = None) -> None:
+    def update_selection_count(self, selected: int, total: int = 0) -> None:
         try:
             label = self.query_one("#sidebar-total-count", Static)
-            # If total is not provided, try to parse it from current label or keep existing
-            if total is None:
-                current_text = label.renderable if hasattr(label, 'renderable') else ""
-                # This is a bit brittle, so we rely on the app passing total usually.
-                # For now, if total is missing, we might just show selected.
-                # But better: store total in the class.
-                total = getattr(self, "_last_total_items", 0)
-            else:
-                self._last_total_items = total
-            
             label.update(f"[bold #FFFFFF]{selected}[/] of {total} Selected")
         except Exception:
             pass
@@ -229,10 +273,18 @@ class Sidebar(Container):
             if self.query_one(f"#lib-filter-type-{t}", TypePill).value:
                 selected_types.append(t)
 
+        selected_states = [
+            item.value for item in self.query(StateListItem) 
+            if item.selected and item.value is not None
+        ]
+        
+        # If no specific states selected, or "All" is selected, pass None
+        final_states = selected_states if selected_states else None
+
         return {
             "search": self.query_one("#lib-filter-search", Input).value,
             "type": selected_types if selected_types else ["movie", "show"], # Default if none selected
-            "states": self.query_one("#lib-filter-states", Select).value,
+            "states": final_states,
             "sort": self.query_one("#lib-filter-sort", Select).value,
             "limit": self.query_one("#lib-filter-limit", Select).value,
         }

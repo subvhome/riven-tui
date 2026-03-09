@@ -46,6 +46,12 @@ import httpx
 
 NOTIFICATION_CLEAR_DELAY = 3.0 # Seconds
 
+# Ensure we work from any directory by using absolute paths relative to this script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
+THEMES_DIR = os.path.join(BASE_DIR, "themes")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+
 class TitleSpinner:
     SPINNER_FRAMES = ['⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷']
     DEFAULT_INTERVAL = 0.1
@@ -194,7 +200,7 @@ class MenuButton(Static):
             self.app.app_state = state
 
 class RivenTUI(App):
-    CSS_PATH = "riven_tui.tcss"
+    CSS_PATH = os.path.join(BASE_DIR, "riven_tui.tcss")
     BINDINGS = [
         ("ctrl+t", "toggle_debug", "Debug"),
         ("ctrl+y", "cycle_theme", "Cycle Theme"),
@@ -213,7 +219,7 @@ class RivenTUI(App):
         self.settings = {}
         # Pre-load settings to get tokens for redaction
         try:
-            with open("settings.json", "r") as f:
+            with open(SETTINGS_PATH, "r") as f:
                 self.settings = json.load(f)
         except:
             pass
@@ -398,16 +404,16 @@ class RivenTUI(App):
 
     def on_load(self) -> None: 
         try:
-            with open("settings.json", "r") as f:
+            with open(SETTINGS_PATH, "r") as f:
                 self.settings = json.load(f)
             self.reconfigure_redaction()
             
             # Load and Register selected theme
             theme_name = self.settings.get("theme", "default")
-            theme_path = f"themes/{theme_name}.tcss"
-            import os
+            theme_path = os.path.join(THEMES_DIR, f"{theme_name}.tcss")
+            
             if not os.path.exists(theme_path):
-                theme_path = "themes/default.tcss"
+                theme_path = os.path.join(THEMES_DIR, "default.tcss")
             
             theme_obj = self.parse_tcss_theme(theme_name, theme_path)
             self.register_theme(theme_obj)
@@ -449,10 +455,14 @@ class RivenTUI(App):
         import json
         
         try:
-            # 1. Get all .tcss files in themes/ and SORT them
-            files = sorted([f.replace(".tcss", "") for f in os.listdir("themes") if f.endswith(".tcss")])
+            # 1. FIXED: Use absolute THEMES_DIR constant
+            if not os.path.exists(THEMES_DIR):
+                self.log_message(f"Theme Error: Directory {THEMES_DIR} not found.")
+                return
+
+            files = sorted([f.replace(".tcss", "") for f in os.listdir(THEMES_DIR) if f.endswith(".tcss")])
             if not files:
-                self.log_message("Theme: No theme files found in themes/")
+                self.log_message(f"Theme: No theme files found in {THEMES_DIR}")
                 return
             
             self.log_message(f"Theme: Found {len(files)} themes: {files}")
@@ -466,17 +476,18 @@ class RivenTUI(App):
                 next_idx = 0
                 
             new_theme_name = files[next_idx]
-            theme_path = f"themes/{new_theme_name}.tcss"
+            # FIXED: Construct absolute path for the theme file
+            theme_path = os.path.join(THEMES_DIR, f"{new_theme_name}.tcss")
             
             # 3. Parse, Register and Apply
             theme_obj = self.parse_tcss_theme(new_theme_name, theme_path)
             self.register_theme(theme_obj)
             self.theme = new_theme_name
             
-            # 4. Save to settings
+            # 4. Save to settings - FIXED: Use absolute SETTINGS_PATH constant
             self.settings["theme"] = new_theme_name
             try:
-                with open("settings.json", "w") as f:
+                with open(SETTINGS_PATH, "w") as f:
                     json.dump(self.settings, f, indent=4)
             except Exception as e:
                 self.log_message(f"Theme: Error saving selection: {e}")
@@ -486,6 +497,7 @@ class RivenTUI(App):
             
         except Exception as e:
             self.log_message(f"Theme Cycle Error: {e}")
+            
 
     @on(LogMessage)
     def on_log_message(self, message: LogMessage) -> None:
@@ -543,13 +555,14 @@ class RivenTUI(App):
         """Checks GitHub for a newer version string."""
         import time
         import re
+        # Added cache-busting timestamp to URL
         url = f"https://raw.githubusercontent.com/subvhome/riven-tui/main/version.py?t={int(time.time())}"
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     remote_content = resp.text
-                    # Support both single and double quotes
+                    # Robust regex to catch VERSION = "1.2.3" or VERSION='1.2.3'
                     match = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', remote_content)
                     if match:
                         remote_version = match.group(1)
@@ -559,10 +572,8 @@ class RivenTUI(App):
                         
                         try:
                             if version_tuple(remote_version) > version_tuple(VERSION):
-                                import os
-                                # Robust git detection: check script's directory for .git
-                                script_dir = os.path.dirname(os.path.abspath(__file__))
-                                is_git = os.path.isdir(os.path.join(script_dir, ".git"))
+                                # FIXED: Use the absolute BASE_DIR to detect if this is a git repo
+                                is_git = os.path.isdir(os.path.join(BASE_DIR, ".git"))
                                 
                                 self.push_screen(UpdateScreen(remote_version, is_git_repo=is_git))
                                 self.log_message(f"Update found: Local {VERSION} vs Remote {remote_version}")
@@ -570,6 +581,8 @@ class RivenTUI(App):
                             self.log_message(f"Version comparison failed: {e}")
         except Exception as e:
             self.log_message(f"Update check failed: {e}")
+            
+            
 
     async def on_mount(self) -> None:
         # Initialize dynamic bindings
@@ -594,10 +607,11 @@ class RivenTUI(App):
             redact_patterns.append(self.settings["tmdb_bearer_token"])
 
         if not self.logger.handlers:
-            # File Handler
+            # File Handler - FIXED: Use absolute LOGS_DIR constant
             import os
-            os.makedirs('logs', exist_ok=True)
-            file_handler = RotatingFileHandler('logs/riven.log', maxBytes=5*1024*1024, backupCount=3)
+            os.makedirs(LOGS_DIR, exist_ok=True)
+            log_file_path = os.path.join(LOGS_DIR, 'riven.log')
+            file_handler = RotatingFileHandler(log_file_path, maxBytes=5*1024*1024, backupCount=3)
             formatter = RedactingFormatter(
                 '%(asctime)s - [%(name)s] - %(levelname)s - %(message)s',
                 patterns=redact_patterns
@@ -618,7 +632,7 @@ class RivenTUI(App):
         self.update_ram_display() # Initial update
         
         self.run_worker(self.perform_startup())
-
+        
     async def perform_startup(self) -> None:
         self.tui_logger.debug("perform_startup worker started")
         import os
@@ -626,13 +640,11 @@ class RivenTUI(App):
 
         if "api_key" in self.settings and "riven_key" not in self.settings:
             self.settings["riven_key"] = self.settings.pop("api_key")
-            self.log_message("Migrating api_key to riven_key in settings.json...")
             try:
-                with open("settings.json", "w") as f:
+                with open(SETTINGS_PATH, "w") as f:
                     json.dump(self.settings, f, indent=4)
             except Exception as e:
-                self.tui_logger.error(f"Migration Error (Saving): {e}", exc_info=True)
-
+                self.tui_logger.error(f"Migration Error: {e}")
         if not self.chafa_available:
             self.tui_logger.debug("Chafa not available, showing ChafaCheckScreen")
             if not await self.push_screen_wait(ChafaCheckScreen()):
@@ -978,7 +990,7 @@ class RivenTUI(App):
                 poster_url = f"https://image.tmdb.org/t/p/w1280{tmdb_data['poster_path']}"
                 poster_art, error = await self.api.get_poster_chafa(poster_url, width=target_width, height=target_height)
                 if not error:
-                    poster_widget.update(Text.from_ansi(poster_art))
+                    poster_widget.update(Text.from_ansi(poster_art, no_wrap=True))
                     main_content.last_chafa_width = target_width
 
     @on(Input.Submitted, "#grid-search-input")
@@ -1446,14 +1458,6 @@ class RivenTUI(App):
         await self.show_item_actions() 
 
     async def show_library_items(self, limit: int = 20, page: int = 1, sort: str = "date_desc", item_type: str | None = None, search: str | None = None, states: List[str] | None = None, refresh_cache: bool = False) -> None:
-        self.last_library_filters = {
-            "limit": limit,
-            "page": page,
-            "sort": sort,
-            "item_type": item_type,
-            "search": search,
-            "states": states,
-        }
         main_content = self.query_one(MainContent)
         container = main_content.query_one("#main-content-container")
         lib_list = main_content.query_one("#library-list")
@@ -1468,7 +1472,37 @@ class RivenTUI(App):
         # Determine the types to send to the API.
         api_item_type = item_type if item_type is not None else ["movie", "show"]
             
-        # Call the API with all filters, limit, and page
+        # 0. Initial Count-Only Fetch for immediate UI feedback
+        count_resp, count_err = await self.api.get_items(
+            riven_key,
+            limit=limit,
+            page=page,
+            sort=sort,
+            search=search,
+            item_type=api_item_type,
+            states=states,
+            count_only=True
+        )
+
+        if not count_err and count_resp:
+            total_count = int(count_resp.get("total_items", count_resp.get("total", 0)))
+            total_pages = int(count_resp.get("total_pages", math.ceil(total_count / limit) if limit > 0 else 1))
+            
+            # ATOMIC UPDATE: Sync internal state AND UI at the same time
+            self.last_library_filters = {
+                "limit": limit,
+                "page": page,
+                "sort": sort,
+                "item_type": api_item_type,
+                "search": search,
+                "states": states,
+            }
+            
+            # Update UI immediately with the accurate count
+            sidebar = self.query_one(Sidebar)
+            sidebar.update_pagination(page, total_pages, total_count, len(self.library_selection))
+
+        # 1. Fetch actual items
         resp, err = await self.api.get_items(
             riven_key, 
             limit=limit, 
@@ -1486,92 +1520,96 @@ class RivenTUI(App):
             self.notify(f"API Error: {err}", severity="error")
             return
 
-        self.tui_logger.debug(f"Library API response meta: total_items={resp.get('total_items')}, total_pages={resp.get('total_pages')}")
         items = resp.get("items", [])
-        total_count = resp.get("total_items", resp.get("total", 0))
-        total_pages = resp.get("total_pages", math.ceil(total_count / limit) if limit > 0 else 1)
+        total_count = int(resp.get("total_items", resp.get("total", 0)))
+        total_pages = int(resp.get("total_pages", math.ceil(total_count / limit) if limit > 0 else 1))
 
-        if items:
-            await self.start_spinner("Enriching library data...")
-            # Parallel fetch TMDB details for all items to get ratings/genres/taglines
-            async def enrich_item(item):
-                try:
-                    # 1. Identify IDs
-                    # Riven internal list ID
-                    item["riven_id"] = str(item.get("id"))
-                    
-                    m_type = item.get("type", "movie")
-                    tmdb_m_type = "movie" if m_type == "movie" else "tv"
-                    
-                    # lookup_id is what Riven detail API expects (TMDB for movie, TVDB for show)
-                    lookup_id = item.get("tmdb_id") if m_type == "movie" else (item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id"))
-                    if not lookup_id and m_type == "show":
-                        lookup_id = item.get("id")
-                    
-                    item["lookup_id"] = str(lookup_id) if lookup_id else None
-                    
-                    # 2. Identify TMDB ID for metadata enrichment
-                    tmdb_token = self.settings.get("tmdb_bearer_token")
-                    tmdb_id = await self.api.resolve_tmdb_id(item, tmdb_token)
-
-                    # 3. Enrich
-                    if tmdb_id:
-                        details, _ = await self.api.get_tmdb_details(tmdb_m_type, tmdb_id, tmdb_token)
-                        if details:
-                            # Preserve Riven-specific fields that TMDB might overwrite or lack
-                            p_title = item.get("parent_title")
-                            # Preserve all variations of S/E keys and flags
-                            preserved_vals = {
-                                k: item.get(k) for k in [
-                                    "season_number", "episode_number", 
-                                    "seasonNumber", "episodeNumber",
-                                    "season", "episode", "is_anime"
-                                ] if item.get(k) is not None
-                            }
-                            
-                            # Only take "enrichment" fields from TMDB
-                            enrichment_fields = [
-                                "tagline", "genres", "vote_average", "vote_count", 
-                                "overview", "popularity", "content_rating", "original_language"
-                            ]
-                            for field in enrichment_fields:
-                                if field in details:
-                                    item[field] = details[field]
-                            
-                            # Restore preserved fields
-                            if p_title: item["parent_title"] = p_title
-                            for k, v in preserved_vals.items():
-                                item[k] = v
-                            
-                            # Use TMDB poster if Riven doesn't provide one
-                            if not item.get("poster_path") and details.get("poster_path"):
-                                item["poster_path"] = details["poster_path"]
-                            
-                            item["tmdb_id"] = tmdb_id
-                except Exception as e:
-                    self.tui_logger.error(f"Failed to enrich library item: {e}")
-                
-                return item
-
-            results = await asyncio.gather(*(enrich_item(i) for i in items), return_exceptions=True)
-            # Filter out any actual Exception objects that might have bubbled up
-            items = [r for r in results if isinstance(r, dict)]
-            self.stop_spinner()
+        # Sync UI again in case count shifted during enrichment or if first call failed
+        sidebar = self.query_one(Sidebar)
+        sidebar.update_pagination(page, total_pages, total_count, len(self.library_selection))
 
         if not items:
             container.remove_class("hidden")
             lib_list.add_class("hidden")
+            await container.query("*").remove()
             await container.mount(Static("No library items found matching your filters.", id="empty-library-msg"))
-        else:
-            container.add_class("hidden")
-            lib_list.remove_class("hidden")
-            for item in items:
-                is_selected = str(item.get("id")) in self.library_selection
-                await lib_list.append(LibraryItemCard(item, initial_selected=is_selected))
+            return
+
+        # Enrichment and display continues...
+        container.add_class("hidden")
+        lib_list.remove_class("hidden")
+        lib_list.clear() # Clear again to be safe before enrichment
+
+        await self.start_spinner("Enriching library data...")
+        # Parallel fetch TMDB details for all items to get ratings/genres/taglines
+        async def enrich_item(item):
+            try:
+                # 1. Identify IDs
+                # Riven internal list ID
+                item["riven_id"] = str(item.get("id"))
                 
-        # Update Pagination Controls
-        sidebar = self.query_one(Sidebar)
-        sidebar.update_pagination(page, total_pages, total_count, len(self.library_selection))
+                m_type = item.get("type", "movie")
+                tmdb_m_type = "movie" if m_type == "movie" else "tv"
+                
+                # lookup_id is what Riven detail API expects (TMDB for movie, TVDB for show)
+                lookup_id = item.get("tmdb_id") if m_type == "movie" else (item.get("tvdb_id") or (item.get("parent_ids") or {}).get("tvdb_id"))
+                if not lookup_id and m_type == "show":
+                    lookup_id = item.get("id")
+                
+                item["lookup_id"] = str(lookup_id) if lookup_id else None
+                
+                # 2. Identify TMDB ID for metadata enrichment
+                tmdb_token = self.settings.get("tmdb_bearer_token")
+                tmdb_id = await self.api.resolve_tmdb_id(item, tmdb_token)
+
+                # 3. Enrich
+                if tmdb_id:
+                    details, _ = await self.api.get_tmdb_details(tmdb_m_type, tmdb_id, tmdb_token)
+                    if details:
+                        # Preserve Riven-specific fields that TMDB might overwrite or lack
+                        p_title = item.get("parent_title")
+                        # Preserve all variations of S/E keys and flags
+                        preserved_vals = {
+                            k: item.get(k) for k in [
+                                "season_number", "episode_number", 
+                                "seasonNumber", "episodeNumber",
+                                "season", "episode", "is_anime"
+                            ] if item.get(k) is not None
+                        }
+                        
+                        # Only take "enrichment" fields from TMDB
+                        enrichment_fields = [
+                            "tagline", "genres", "vote_average", "vote_count", 
+                            "overview", "popularity", "content_rating", "original_language"
+                        ]
+                        for field in enrichment_fields:
+                            if field in details:
+                                item[field] = details[field]
+                        
+                        # Restore preserved fields
+                        if p_title: item["parent_title"] = p_title
+                        for k, v in preserved_vals.items():
+                            item[k] = v
+                        
+                        # Use TMDB poster if Riven doesn't provide one
+                        if not item.get("poster_path") and details.get("poster_path"):
+                            item["poster_path"] = details["poster_path"]
+                        
+                        item["tmdb_id"] = tmdb_id
+            except Exception as e:
+                self.tui_logger.error(f"Failed to enrich library item: {e}")
+            
+            return item
+
+        results = await asyncio.gather(*(enrich_item(i) for i in items), return_exceptions=True)
+        # Filter out any actual Exception objects that might have bubbled up
+        items = [r for r in results if isinstance(r, dict)]
+        self.stop_spinner()
+
+        for item in items:
+            is_selected = str(item.get("id")) in self.library_selection
+            await lib_list.append(LibraryItemCard(item, initial_selected=is_selected))
+
 
     @on(ListView.Selected, "#library-list")
     async def on_library_item_clicked(self, event: ListView.Selected) -> None: 
@@ -1600,10 +1638,9 @@ class RivenTUI(App):
             self.watch_app_state("dashboard")
         elif self.navigation_source == "library":
             if self.last_library_filters:
-                # Limit might have changed, but page is no longer tracked
-                await self.show_library_items(**self.last_library_filters)
+                self.run_worker(self.show_library_items(**self.last_library_filters), name="show_library_items", exclusive=True)
             else:
-                await self.show_library_items()
+                self.run_worker(self.show_library_items(), name="show_library_items", exclusive=True)
         elif self.navigation_source == "search":
             self.app_state = "search"
         elif self.navigation_source == "calendar":
@@ -1634,18 +1671,26 @@ class RivenTUI(App):
         if self.last_library_filters:
             current_page = self.last_library_filters.get("page", 1)
             if current_page > 1:
-                # Update filters and reload directly
-                self.last_library_filters["page"] = current_page - 1
-                await self.show_library_items(**self.last_library_filters)
+                params = self.last_library_filters.copy()
+                params["page"] = current_page - 1
+                self.run_worker(
+                    self.show_library_items(**params),
+                    name="show_library_items",
+                    exclusive=True
+                )
 
     @on(Button.Pressed, "#btn-next-page")
     async def on_next_page_click(self, event: Button.Pressed):
         event.stop()
         if self.last_library_filters:
             current_page = self.last_library_filters.get("page", 1)
-            # Update filters and reload directly
-            self.last_library_filters["page"] = current_page + 1
-            await self.show_library_items(**self.last_library_filters)
+            params = self.last_library_filters.copy()
+            params["page"] = current_page + 1
+            self.run_worker(
+                self.show_library_items(**params),
+                name="show_library_items",
+                exclusive=True
+            )
 
     @on(MonthChanged)
     async def on_month_changed(self, event: MonthChanged):
@@ -2177,10 +2222,10 @@ class RivenTUI(App):
         riven_key = self.settings.get("riven_key")
         resp, err = await self.api.get_items(
             riven_key, 
-            limit=1, 
-            sort=filters.get("sort"), 
-            item_type=filters.get("item_type"), 
-            search=filters.get("search"), 
+            limit=1,
+            sort=filters.get("sort"),
+            item_type=filters.get("item_type"),
+            search=filters.get("search"),
             states=filters.get("states")
         )
         
@@ -2245,7 +2290,7 @@ class RivenTUI(App):
             
         # Refresh current view to show checkmarks
         if self.last_library_filters:
-            await self.show_library_items(**self.last_library_filters)
+            self.run_worker(self.show_library_items(**self.last_library_filters), name="show_library_items", exclusive=True)
 
     @on(Button.Pressed, "#btn-clear-selection")
     async def on_clear_selection(self):
@@ -2264,9 +2309,9 @@ class RivenTUI(App):
         
         # Refresh current library view to update checkboxes
         if self.last_library_filters:
-            await self.show_library_items(**self.last_library_filters)
+            self.run_worker(self.show_library_items(**self.last_library_filters), name="show_library_items", exclusive=True)
         else:
-            await self.show_library_items()
+            self.run_worker(self.show_library_items(), name="show_library_items", exclusive=True)
 
     async def handle_bulk_action(self, action: str, display_name: str):
         if not self.library_selection:
@@ -2309,7 +2354,7 @@ class RivenTUI(App):
             self.log_message(f"Bulk {display_name}: Success.")
             self.library_selection.clear()
             if self.last_library_filters:
-                await self.show_library_items(**self.last_library_filters)
+                self.run_worker(self.show_library_items(**self.last_library_filters), name="show_library_items", exclusive=True)
         else:
             self.notify(f"Bulk {display_name} failed: {response}", severity="error")
             self.log_message(f"Bulk {display_name}: Failed. Error: {response}")
@@ -2339,16 +2384,23 @@ class RivenTUI(App):
 
     @on(Button.Pressed, "#btn-apply-filters")
     async def on_apply_filters(self):
+        # Fix #4: Wait for sidebar state (pills, checkboxes, list items) to settle
+        await asyncio.sleep(0.1)
+        
         sidebar = self.query_one(Sidebar)
         filters = sidebar.get_filter_values()
         
-        await self.show_library_items(
-            limit=filters["limit"],
-            page=1, # Reset to page 1
-            sort=filters["sort"],
-            item_type=filters["type"],
-            search=filters["search"],
-            states=[filters["states"]] if filters["states"] else None,
+        self.run_worker(
+            self.show_library_items(
+                limit=filters["limit"],
+                page=1, # Reset to page 1
+                sort=filters["sort"],
+                item_type=filters["type"],
+                search=filters["search"],
+                states=filters["states"],
+            ),
+            name="show_library_items",
+            exclusive=True
         )
 
     @on(Button.Pressed)

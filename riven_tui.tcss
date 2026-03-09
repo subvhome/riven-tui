@@ -117,7 +117,8 @@ Button {
     text-align: center;
     color: #555;
     text-style: italic;
-    margin-top: 1;
+    margin-top: 0;
+    margin-bottom: 1;
 }
 
 #search-grid-scroll {
@@ -131,44 +132,53 @@ Button {
     layout: grid;
     grid-size: 4; 
     grid-gutter: 1 2;
+    /* Force every row to be exactly 22 high to match the poster */
+    grid-rows: 22;
     padding: 0 2;
     height: auto;
 }
 
 .search-tile {
-    width: 100%;
-    height: 20;
-    min-height: 20;
+    height: 22;
     background: $surface;
-    border: solid #2C3E50;
-    padding: 1;
+    border: tall transparent;
+    padding: 0;
+    margin: 0;
+    /* Ensure the tile is a stable container */
+    overflow: hidden;
 }
 
-.search-tile:hover {
-    background: #24243E;
-    border: solid $secondary;
-}
-
-.search-tile:focus {
-    background: #24243E;
-    border: double $accent;
-}
-
-.search-tile.-hover-loading {
-    border: dashed $accent;
+.search-tile.-mouse-over {
+    border: tall $accent;
+    background: $panel;
 }
 
 #tile-poster {
     width: 100%;
     height: 100%;
     content-align: center middle;
-    background: #000;
-    margin: -1;
+    background: black;
+    display: none; /* Hidden by default */
 }
 
 #tile-info {
     width: 100%;
     height: 100%;
+    padding: 1 2;
+    display: block;
+}
+
+/* The Switch: Hide text and show image when class is added */
+.search-tile.-show-poster #tile-info {
+    display: none;
+}
+
+.search-tile.-show-poster #tile-poster {
+    display: block;
+}
+/* Ensure info is hidden when poster is active */
+#tile-info.hidden {
+    display: none;
 }
 
 .tile-header {
@@ -197,10 +207,15 @@ Button {
     align: center middle;
 }
 
+.tile-header, .tile-footer {
+    height: 1;
+}
+
 .tile-title {
     text-align: center;
     text-style: bold;
-    color: #FFF;
+    color: white; /* Force white for visibility */
+    width: 100%;
 }
 
 .tile-footer {
@@ -268,6 +283,54 @@ Button {
     height: 3;
     border: none;
     background: #2C3E50;
+}
+
+#lib-filter-states-list {
+    height: auto;
+    max-height: 13;
+    margin-bottom: 1;
+    background: #2C3E50;
+    border: none;
+    padding: 0;
+}
+
+.state-list-item {
+    height: 1;
+    padding: 0 1;
+    background: transparent;
+    layout: horizontal;
+    align: left middle;
+}
+
+.state-list-item Label {
+    margin: 0 !important; /* CRITICAL: Override the sidebar label margin */
+    padding-left: 1;
+    height: 1;
+    color: $foreground;
+    width: 1fr;
+}
+
+.state-list-item:hover {
+    background: $primary;
+}
+
+.state-list-item.-selected {
+    background: rgba(61, 90, 128, 0.4);
+}
+
+.state-list-item.-selected Label {
+    color: #FFF;
+    text-style: bold;
+}
+
+.state-list-item .selection-square {
+    width: 2;
+    height: 1;
+    color: #444;
+}
+
+.state-list-item.-selected .selection-square {
+    color: $accent;
 }
 
 #lib-filter-search, #lib-filter-page {

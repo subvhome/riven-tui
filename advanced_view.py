@@ -75,7 +75,10 @@ class AdvancedView(Vertical):
         import os
         import json
         
-        file_path = "riven_export.json"
+        # Use absolute path from main app
+        base_dir = getattr(self.app, "BASE_DIR", os.getcwd())
+        file_path = os.path.join(base_dir, "riven_export.json")
+        
         if not os.path.exists(file_path):
             status.update(f"[red]Error: {file_path} not found.[/]")
             return
@@ -195,6 +198,7 @@ class AdvancedView(Vertical):
             self.show_import_export = not self.show_import_export
 
     @on(Button.Pressed, "#btn-export-lib")
+    
     async def on_export(self) -> None:
         status = self.query_one("#export-status", Static)
         status.update("[yellow]Initializing export file...[/]")
@@ -214,11 +218,15 @@ class AdvancedView(Vertical):
             return
             
         total_pages = (total + limit - 1) // limit
-        export_file = "riven_export.json"
+        
+        # FIXED: Use absolute path relative to the script location
+        import os
+        import json
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        export_file = os.path.join(base_dir, "riven_export.json")
         
         # 2. Sequential Batching
         count = 0
-        import json
         
         try:
             with open(export_file, "w") as f:
@@ -257,7 +265,7 @@ class AdvancedView(Vertical):
             status.update(f"[green]Export complete! Saved {count} items to {export_file}[/]")
         except Exception as e:
             status.update(f"[red]Write Error: {e}[/]")
-
+            
     @on(Button.Pressed, "#btn-adv-scan")
     async def on_scan(self) -> None:
         val = self.query_one("#adv-mdblist-input", Input).value.strip()
@@ -266,8 +274,7 @@ class AdvancedView(Vertical):
             return
 
         status = self.query_one("#adv-status-line", Static)
-        status.update("[yellow]Fetching list from Mdblist...[/]")
-        self.app.log_message(f"Advanced: Starting scan for {val}")
+        status.update("[yellow]Fetching full list from Mdblist (this may take a moment for large lists)...[/]")
         
         # Clear all lists
         self.query_one("#adv-list-root", ListView).clear()
@@ -277,7 +284,7 @@ class AdvancedView(Vertical):
         self.missing_movies = []
         self.missing_shows = []
 
-        # 1. Fetch Mdblist
+        # 1. Fetch paginated Mdblist
         mdb_items, mdb_err = await self.app.api.get_mdblist_items(val)
         if mdb_err:
             status.update(f"[red]Mdblist Error: {mdb_err}[/]")
@@ -285,33 +292,45 @@ class AdvancedView(Vertical):
 
         all_mdb_movies = mdb_items.get("movies", [])
         all_mdb_shows = mdb_items.get("shows", [])
+        total_items = len(all_mdb_movies) + len(all_mdb_shows)
         
-        if not all_mdb_movies and not all_mdb_shows:
+        if total_items == 0:
             status.update("[yellow]Mdblist is empty or not yet populated.[/]")
             return
 
-        # 2. Surgical Probing
-        status.update(f"[yellow]Surgically probing Riven for {len(all_mdb_movies) + len(all_mdb_shows)} items...[/]")
+        # 2. Surgical Probing with Progress
+        status.update(f"[yellow]Downloaded {total_items} items. Surgically probing Riven...[/]")
         riven_key = self.app.settings.get("riven_key")
         self.matched_items = {}
         
         semaphore = asyncio.Semaphore(10)
+        processed = 0
 
         async def probe_movie(m):
+            nonlocal processed
             imdb_id = m.get("imdb_id")
-            if not imdb_id: return None
-            async with semaphore:
-                resp, err = await self.app.api.get_items(riven_key, search=imdb_id, limit=1)
-                if resp and resp.get("items"): return resp["items"][0]
-            return None
+            res = None
+            if imdb_id:
+                async with semaphore:
+                    resp, err = await self.app.api.get_items(riven_key, search=imdb_id, limit=1)
+                    if resp and resp.get("items"): 
+                        res = resp["items"][0]
+            processed += 1
+            if processed % 10 == 0:
+                status.update(f"[yellow]Probing Riven: {processed}/{total_items} items...[/]")
+            return res
 
         async def probe_show(s):
+            nonlocal processed
             tvdb_id = s.get("tvdb_id")
-            if not tvdb_id: return None
-            async with semaphore:
-                item = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key)
-                return item
-            return None
+            res = None
+            if tvdb_id:
+                async with semaphore:
+                    res = await self.app.api.get_item_by_id("tv", str(tvdb_id), riven_key)
+            processed += 1
+            if processed % 10 == 0:
+                status.update(f"[yellow]Probing Riven: {processed}/{total_items} items...[/]")
+            return res
 
         # Gather results parallel
         movie_tasks = [probe_movie(m) for m in all_mdb_movies]
@@ -323,7 +342,6 @@ class AdvancedView(Vertical):
         # 3. Process & Categorize
         counts = {"root": 0, "season": 0, "episode": 0, "missing": 0}
         
-        # Helper to process results
         def process_match(item):
             i_id = str(item["id"])
             i_type = item.get("type", "unknown")
@@ -348,7 +366,6 @@ class AdvancedView(Vertical):
             if res:
                 process_match(res)
             else:
-                # Missing
                 m_item = all_mdb_movies[i]
                 self.missing_movies.append(m_item)
                 counts["missing"] += 1
@@ -359,7 +376,6 @@ class AdvancedView(Vertical):
             if res:
                 process_match(res)
             else:
-                # Missing
                 s_item = all_mdb_shows[i]
                 self.missing_shows.append(s_item)
                 counts["missing"] += 1
@@ -468,8 +484,14 @@ class AdvancedView(Vertical):
         if unsupported_items:
             import json
             import os
-            log_file = "logs/unsupported_bulk.json"
+            # Use absolute LOGS_DIR from main app
+            if hasattr(self.app, "BASE_DIR"):
+                 log_file = os.path.join(self.app.BASE_DIR, "logs", "unsupported_bulk.json")
+            else:
+                 log_file = "logs/unsupported_bulk.json"
+
             try:
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
                 with open(log_file, "w") as f:
                     json.dump(unsupported_items, f, indent=4)
                 self.app.log_message(f"Advanced: Logged {len(unsupported_items)} unsupported items to {log_file}")

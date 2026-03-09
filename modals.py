@@ -80,12 +80,17 @@ class UpdateScreen(ModalScreen[bool]):
         bar = self.query_one("#update-bar", ProgressBar)
         details = self.query_one("#update-details", Static)
         import sys
+        import os
+        
+        # Get absolute path from the app instance
+        base_dir = getattr(self.app, "BASE_DIR", os.getcwd())
         
         try:
+            # Sequence: Fetch -> Hard Reset (to overwrite local changes) -> Pull -> Install Deps
             steps = [
-                ("Fetching...", ["git", "fetch", "--all"]),
-                ("Resetting...", ["git", "reset", "--hard", "origin/main"]),
-                ("Pulling...", ["git", "pull", "origin", "main"]),
+                ("Fetching latest code...", ["git", "fetch", "--all"]),
+                ("Cleaning local files...", ["git", "reset", "--hard", "origin/main"]),
+                ("Pulling updates...", ["git", "pull", "origin", "main"]),
                 ("Updating dependencies...", [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"]),
             ]
             
@@ -93,29 +98,37 @@ class UpdateScreen(ModalScreen[bool]):
             
             for i, (msg, cmd) in enumerate(steps):
                 details.update(f"[yellow]{msg}[/]")
+                
+                # FIXED: Added 'cwd=base_dir' to ensure git runs in the right folder
                 process = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=base_dir
                 )
                 stdout, stderr = await process.communicate()
                 
                 if process.returncode != 0:
-                    raise Exception(stderr.decode().strip())
+                    # If reset fails, try to continue, but if pull fails, we stop
+                    err_text = stderr.decode().strip()
+                    if "pull" in cmd or "fetch" in cmd:
+                        raise Exception(f"Git Error: {err_text}")
                 
                 bar.advance(step_increment)
 
-            details.update("[bold green]Update successful![/]\n[cyan]The application will now exit.\nPlease relaunch to use the new version.")
-            await asyncio.sleep(3)
-            self.app.exit()
+            details.update("[bold green]Update successful![/]\n[cyan]Restarting application...")
+            await asyncio.sleep(2)
+            # Use sys.executable to relaunch the app
+            os.execv(sys.executable, ['python3'] + sys.argv)
             
         except Exception as e:
             if hasattr(self.app, "log_message"):
                 self.app.log_message(f"Update Error: {e}")
             details.update(f"[red]Update failed: {e}[/]")
-            await asyncio.sleep(5)
-            self.dismiss(False)
-
+            # Show buttons again so user can exit
+            self.query_one("#update-buttons").display = True
+            self.query_one("#btn-update-confirm").disabled = True
+            
 class MediaCardScreen(ModalScreen):
     last_chafa_width: Optional[int] = None
 
@@ -224,6 +237,7 @@ class MediaCardScreen(ModalScreen):
             self.post_message_debounce_timer = self.set_timer(0.2, lambda: self.post_message(RefreshPoster()))
 
     @on(RefreshPoster)
+
     async def on_refresh_poster(self, message: RefreshPoster) -> None:
         try:
             poster_widget = self.query_one("#poster-display-modal", Static)
