@@ -215,7 +215,10 @@ class MediaCardScreen(ModalScreen):
                 Button("Reset", id="btn-reset-modal", variant="warning"),
                 Button("Retry", id="btn-retry-modal", variant="primary"),
             ])
-        action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success", disabled=True))
+        
+        # ENABLED: Changed disabled=True to disabled=False
+        action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success", disabled=False))
+        
         if not riven_data:
             action_buttons.append(Button("Request", id="btn-add-modal", variant="success"))
         
@@ -408,14 +411,35 @@ class MediaCardScreen(ModalScreen):
 
     @on(Button.Pressed, "#btn-scrape-modal")
     def handle_scrape(self):
+        # Dismiss with the dictionary that rtu.py is looking for
         result = {
             "action": "trigger_manual_scrape",
-            "item_data": {"id": self.tmdb_data.get("id"), "media_type": self.media_type},
+            "item_data": {
+                "id": self.tmdb_data.get("id"), 
+                "media_type": self.media_type,
+                # item_id is Riven's internal database ID
+                "item_id": self.riven_data.get("id") if self.riven_data else None
+            },
             "tmdb_details": self.tmdb_data,
             "item_details": self.riven_data
         }
         self.dismiss(result)
-
+        
+    @on(Button.Pressed, "#btn-scrape-modal")
+    def handle_scrape(self):
+        # We dismiss with a result dictionary that the main app (riven_tui.py) will catch
+        result = {
+            "action": "trigger_manual_scrape",
+            "item_data": {
+                "id": self.tmdb_data.get("id"), 
+                "media_type": self.media_type,
+                # item_id is Riven's internal database ID
+                "item_id": self.riven_data.get("id") if self.riven_data else None
+            },
+            "tmdb_details": self.tmdb_data,
+            "item_details": self.riven_data
+        }
+        self.dismiss(result)
 class ScrapeLogScreen(ModalScreen[dict]):
     def __init__(self, media_type: str, tmdb_id: int, riven_key: str, riven_item_id: str = None, tvdb_id: int = None, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(name=name, id=id, classes=f"{classes or ''} centered-modal-screen".strip())
@@ -436,33 +460,92 @@ class ScrapeLogScreen(ModalScreen[dict]):
         self.run_worker(self.run_discovery())
 
     async def run_discovery(self):
-        log_widget = self.query_one(Log)
-        log_widget.write_line("Starting stream discovery...")
+        if hasattr(self.app, "stop_spinner"):
+            self.app.stop_spinner()
+
+        log_widget = self.query_one("#scrape-log", Log)
+
+        # --- PHASE 1: LOGIN ---
+        log_widget.write_line("[bold cyan]Phase 1: Frontend Authentication[/]")
+        user = self.app.settings.get("riven_username")
+        pw = self.app.settings.get("riven_password")
+        
+        if not user or not pw:
+            log_widget.write_line("[bold red]Error:[/] riven_username or riven_password missing in settings.json")
+            return
+
+        success, res = await self.app.api.login(user, pw)
+        
+        if not success:
+            log_widget.write_line(f"[bold red]Login Failed:[/] {res}")
+            return
+        log_widget.write_line(f"[bold green]Auth Cached:[/] riven.session_token={res[:15]}...")
+
+        # --- PHASE 2: SETTINGS ---
+        log_widget.write_line("\n[bold cyan]Phase 2: Fetching Backend Rules[/]")
+        settings_data, err = await self.app.api.get_settings(self.riven_key)
+        if err:
+            log_widget.write_line(f"[bold red]Settings Error:[/] {err}")
+            return
+
+        # --- PHASE 3: OVERRIDES ---
+        log_widget.write_line("[bold green]Building Ranking Overrides...[/]")
+        try:
+            ranking = settings_data.get("ranking", {})
+            custom = ranking.get("custom_ranks", {})
+            overrides = {
+                "resolutions": [k for k, v in ranking.get("resolutions", {}).items() if v],
+                "quality": [k for k, v in custom.get("quality", {}).items() if v.get("fetch")],
+                "rips": [k for k, v in custom.get("rips", {}).items() if v.get("fetch")],
+                "hdr": [k for k, v in custom.get("hdr", {}).items() if v.get("fetch")],
+                "audio": [k for k, v in custom.get("audio", {}).items() if v.get("fetch")],
+                "extras": [k for k, v in custom.get("extras", {}).items() if v.get("fetch")],
+                "trash": [k for k, v in custom.get("trash", {}).items() if v.get("fetch")],
+                "require": ranking.get("require", []),
+                "exclude": ranking.get("exclude", [])
+            }
+        except Exception as e:
+            log_widget.write_line(f"[bold red]Override Parser Error:[/] {e}")
+            return
+
+        # --- PHASE 4: STREAMING ---
+        log_widget.write_line("\n[bold cyan]Phase 3: Discovery Stream[/]")
         try:
             async for line in self.app.api.scrape_stream(
-                self.media_type, self.tmdb_id, self.riven_key, self.riven_item_id, tvdb_id=self.tvdb_id
+                self.media_type, self.tmdb_id, self.riven_key, 
+                item_id=self.riven_item_id, tvdb_id=self.tvdb_id, overrides=overrides
             ):
+                # Your logs show lines like 'data: {"event":"streams", ...}'
                 if line.startswith("data:"):
-                    data_content = line[len("data:"):
-].strip()
-                    if data_content == "[DONE]":
-                        break
+                    raw = line[5:].strip()
+                    if raw == "[DONE]": break
                     try:
-                        message_data = json.loads(data_content)
-                        if 'message' in message_data:
-                            log_widget.write_line(f"-> {message_data['message']}")
-                        if 'streams' in message_data and message_data['streams']:
-                            self.all_streams.update(message_data['streams'])
-                    except json.JSONDecodeError:
+                        msg = json.loads(raw)
+                        # Riven sends 'message' describing which service found what
+                        if 'message' in msg: 
+                            log_widget.write_line(f"-> {msg['message']}")
+                        
+                        # Accumulate streams into the results
+                        if 'streams' in msg and msg['streams']:
+                            self.all_streams.update(msg['streams'])
+                            
+                        if msg.get("event") == "complete": 
+                            break
+                    except: 
                         continue
                 elif line.startswith("error:"):
-                    log_widget.write_line(f"ERROR: {line}")
+                    log_widget.write_line(f"[bold red]BACKEND ERROR:[/] {line}")
+
+            log_widget.write_line(f"\n[bold green]Complete![/] Found {len(self.all_streams)} streams.")
             
-            log_widget.write_line("Discovery complete.")
-            await asyncio.sleep(1)
-            self.dismiss(self.all_streams)
+            if self.all_streams:
+                await asyncio.sleep(1.5)
+                self.dismiss(self.all_streams)
+            else:
+                log_widget.write_line("[yellow]No streams found. Check indexer settings.[/]")
+
         except Exception as e:
-            log_widget.write_line(f"Unexpected error: {e}")
+            log_widget.write_line(f"[bold red]Critical stream failure:[/] {e}")
 
     @on(Button.Pressed, "#btn-close-scrape-log")
     def on_close_button(self, event: Button.Pressed):
@@ -622,15 +705,13 @@ class FileMappingScreen(ModalScreen[dict]):
     @on(Button.Pressed, "#btn-abort-session")
     async def on_abort_session(self, event: Button.Pressed) -> None: 
         if self.session_id:
-            success, response = await self.app.api.abort_scrape_session(self.session_id, self.app.settings.get("riven_key"))
+            # Replaces the old specific abort call with the unified session action
+            success, response = await self.app.api.scrape_session_action(
+                self.session_id, "abort", self.app.settings.get("riven_key")
+            )
             if success:
                 self.app.notify("Scrape session aborted.", severity="info")
                 self.dismiss(None)
-            else:
-                self.app.notify(f"Error aborting session: {response}", severity="error")
-        else:
-            self.app.notify("No session to abort.", severity="warning")
-            self.dismiss(None)
 
 class ChafaCheckScreen(ModalScreen[bool]):
     def __init__(self, name: str | None = None, id: str | None = None, classes: str | None = None) -> None:

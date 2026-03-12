@@ -4,7 +4,14 @@
         "host": "192.168.1.100",
         "port": 8080
     },
+    "fe_config": {
+        "protocol": "http",
+        "host": "192.168.1.100",
+        "port": 33000
+    },
     "riven_key": "YOUR_RIVEN_KEY_HERE",
+    "riven_username": "vgil",
+    "riven_password": "YOUR_PASSWORD_HERE",
     "tmdb_bearer_token": "",
     "theme": "default",
     "request_timeout": 30.0,

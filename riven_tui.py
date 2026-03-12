@@ -248,7 +248,8 @@ class RivenTUI(App):
 
     def get_mem_usage(self) -> str:
         """Reads /proc/self/status to get current RSS memory usage (Linux)."""
-        gc.collect()
+        # CRITICAL FIX: Removed gc.collect() here. Running garbage collection 
+        # every 5 seconds on a timer causes massive, app-wide UI freezing.
         try:
             with open("/proc/self/status", "r") as f:
                 for line in f:
@@ -635,9 +636,7 @@ class RivenTUI(App):
         
     async def perform_startup(self) -> None:
         self.tui_logger.debug("perform_startup worker started")
-        import os
-        import shutil
-
+        
         if "api_key" in self.settings and "riven_key" not in self.settings:
             self.settings["riven_key"] = self.settings.pop("api_key")
             try:
@@ -645,45 +644,61 @@ class RivenTUI(App):
                     json.dump(self.settings, f, indent=4)
             except Exception as e:
                 self.tui_logger.error(f"Migration Error: {e}")
+
         if not self.chafa_available:
-            self.tui_logger.debug("Chafa not available, showing ChafaCheckScreen")
             if not await self.push_screen_wait(ChafaCheckScreen()):
-                self.tui_logger.info("ChafaCheckScreen returned False, exiting")
                 self.exit()
                 return
 
         try:
             be_url = self.build_url("be_config")
+            fe_url = self.build_url("fe_config")
+            if not self.settings.get("fe_config"):
+                fe_url = be_url
+                
             timeout = self.settings.get("request_timeout", 10.0)
 
-            self.tui_logger.debug(f"Initializing API with BE URL: {be_url}, timeout: {timeout}")
-            self.api = RivenAPI(be_url, timeout=timeout)
-            self.log_message(f"API Initialized: BE='{be_url}'")
+            self.api = RivenAPI(be_url, fe_url, timeout=timeout)
             
-            # Fetch Genres for Search View
-            self.tui_logger.debug("Fetching TMDB genres...")
-            genre_map, err = await self.api.get_tmdb_genres(self.settings.get("tmdb_bearer_token"))
-            if not err:
-                self.tmdb_genres = genre_map
-                self.log_message(f"TMDB Genres cached ({len(genre_map)} items)")
-            else:
-                self.tui_logger.error(f"Failed to fetch TMDB genres: {err}")
-
-            self.tui_logger.debug("Initializing TitleSpinner and setting initial state")
+            # Switch to UI instantly. No API calls block this.
             self.spinner = TitleSpinner(self, self.base_title) 
-            self.app_state = "welcome" # Cycle state to force watcher to fire
             self.app_state = "dashboard" 
-            self.tui_logger.debug("Startup worker completed, starting update check worker")
-            self.run_worker(self.check_for_updates())
+
+            # Run slow network tasks in the background
+            self.run_worker(self._background_startup_tasks())
+            
         except Exception as e:
-            self.tui_logger.error(f"Config Error during startup: {e}", exc_info=True)
             self.notify(f"Config Error: {e}", severity="error")
+
+    async def _background_startup_tasks(self) -> None:
+        # Give the dashboard a tiny fraction of a second to load first
+        await asyncio.sleep(0.5) 
+        genre_map, err = await self.api.get_tmdb_genres(self.settings.get("tmdb_bearer_token"))
+        if not err: 
+            self.tmdb_genres = genre_map
+        
+        await self.check_for_updates()
+
+    async def _background_startup_tasks(self) -> None:
+        """Tasks that run in background so they don't block the UI during startup."""
+        # Fetch TMDB Genres (This often causes the 30s hang)
+        genre_map, err = await self.api.get_tmdb_genres(self.settings.get("tmdb_bearer_token"))
+        if not err: 
+            self.tmdb_genres = genre_map
+            self.log_message("Background: TMDB Genres loaded.")
+        
+        # Check for TUI updates
+        await self.check_for_updates()
 
     async def on_unmount(self) -> None:
         if hasattr(self, "api"):
             await self.api.shutdown()
 
     async def refresh_dashboard(self):
+        # Safety guard: Don't refresh if the API isn't initialized yet
+        if not hasattr(self, "api"):
+            return
+            
         if getattr(self, "_refreshing_dashboard", False):
             return
         self._refreshing_dashboard = True
@@ -745,7 +760,7 @@ class RivenTUI(App):
             
             # Update recently added
             if recent_resp and recent_resp[0]:
-                recent_items = recent_resp[0].get("items", [])
+                recent_items = recent_resp[0].get("items",[])
                 self.tui_logger.debug(f"Dashboard: Found {len(recent_items)} recent items")
                 await dashboard_view.update_recently_added(recent_items)
                 self.run_worker(self._fetch_recent_ratings(recent_items))
@@ -1030,30 +1045,32 @@ class RivenTUI(App):
         results = results[:20] # Keep top 20
 
         # Fetch full details in parallel for taglines and genres
-        async def fetch_item_details(item):
-            tmdb_token = self.settings.get("tmdb_bearer_token")
-            riven_key = self.settings.get("riven_key")
-            
-            # 1. Fetch TMDB Details
-            details, _ = await self.api.get_tmdb_details(item['media_type'], item['id'], tmdb_token)
-            if details:
-                item.update(details)
-            
-            # 2. Check Library State
-            # Map 'tv' to 'tv' or 'movie' to 'movie' for Riven
-            riven_media_type = "movie" if item['media_type'] == "movie" else "tv"
-            
-            # For TV, try to get TVDB ID if missing
-            lookup_id = item['id']
-            if riven_media_type == "tv":
-                lookup_id = item.get("external_ids", {}).get("tvdb_id") or item['id']
+        semaphore = asyncio.Semaphore(5) # Max 5 concurrent lookups
 
-            lib_item = await self.api.get_item_by_id(riven_media_type, str(lookup_id), riven_key)
-            if lib_item:
-                item["state"] = lib_item.get("state", "Unknown")
-                item["riven_id"] = lib_item.get("id")
-            
-            return item
+        async def fetch_item_details(item):
+            async with semaphore:
+                tmdb_token = self.settings.get("tmdb_bearer_token")
+                riven_key = self.settings.get("riven_key")
+                
+                # 1. Fetch TMDB Details
+                details, _ = await self.api.get_tmdb_details(item['media_type'], item['id'], tmdb_token)
+                if details:
+                    item.update(details)
+                
+                # 2. Check Library State
+                riven_media_type = "movie" if item['media_type'] == "movie" else "tv"
+                
+                # For TV, try to get TVDB ID if missing
+                lookup_id = item['id']
+                if riven_media_type == "tv":
+                    lookup_id = item.get("external_ids", {}).get("tvdb_id") or item['id']
+
+                lib_item = await self.api.get_item_by_id(riven_media_type, str(lookup_id), riven_key)
+                if lib_item:
+                    item["state"] = lib_item.get("state", "Unknown")
+                    item["riven_id"] = lib_item.get("id")
+                
+                return item
 
         detailed_results = await asyncio.gather(*(fetch_item_details(r) for r in results))
         
@@ -1101,7 +1118,7 @@ class RivenTUI(App):
         main_content.add_class("media-details-active")
         container = main_content.query_one("#main-content-container")
 
-        # Reset visibility
+        # FIX: Restore visibility so the card actually shows up!
         container.remove_class("hidden")
         main_content.query_one("#library-list").add_class("hidden")
         main_content.query_one("#main-content-json-container").add_class("hidden")
@@ -1121,11 +1138,11 @@ class RivenTUI(App):
         runtime_movie = tmdb_data.get('runtime', 0) 
         episode_run_time = None
         if search_item_data and search_item_data.get("media_type") == "tv":
-            episode_run_time_list = tmdb_data.get('episode_run_time', [])
+            episode_run_time_list = tmdb_data.get('episode_run_time',[])
             if episode_run_time_list:
                 episode_run_time = f"{episode_run_time_list[0]} mins" 
         
-        languages_spoken_list = [lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
+        languages_spoken_list =[lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
         if not languages_spoken_list and tmdb_data.get('original_language'):
             languages_spoken_list.append(tmdb_data.get('original_language').upper())
         languages_spoken = " - ".join(languages_spoken_list)
@@ -1170,7 +1187,7 @@ class RivenTUI(App):
             await info_col.mount(Static(description, classes="media-overview"))
 
         # 2. Populate Action Column (Right)
-        action_buttons = []
+        action_buttons =[]
         if riven_data:
             action_buttons.extend([
                 Button("Delete", id="btn-delete", variant="error"),
@@ -1178,7 +1195,7 @@ class RivenTUI(App):
                 Button("Retry", id="btn-retry", variant="primary"),
             ])
         
-        action_buttons.append(Button("Manual Scrape", id="btn-manual-scrape", variant="success", disabled=True))
+        action_buttons.append(Button("Manual Scrape", id="btn-manual-scrape", variant="success", disabled=False))
         if not riven_data:
             action_buttons.append(Button("Request", id="btn-add", variant="success"))
         
@@ -1187,10 +1204,10 @@ class RivenTUI(App):
         
         await action_col.mount(Horizontal(*action_buttons, classes="media-button-bar"))
         
-        # Render poster in the action column
-        await self._render_poster(action_col, tmdb_data, width_hint=target_poster_width)
+        # 3. Mount Empty Poster Placeholder
+        await action_col.mount(Static(id="poster-display"))
         
-        # Force a refresh to correct any layout shifts
+        # 4. Trigger Poster Load in Background
         self.set_timer(0.1, lambda: self.post_message(RefreshPoster()))
 
     @on(CalendarItemSelected)
@@ -1243,24 +1260,31 @@ class RivenTUI(App):
             self.notify("Cannot open item: missing TMDB ID", severity="error")
             return
 
-        # Fetch details and show modal
         await self.start_spinner("Fetching details...")
-        tmdb_details, error = await self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token"))
-        if error:
-            self.stop_spinner()
-            self.notify(f"TMDB Error: {error}", severity="error")
-            return
-            
-        riven_media_type = "tv" if media_type == "tv" else "movie"
-        # For movies, Riven ID is TMDB ID. For shows, we might need TVDB ID.
-        riven_id_to_check = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
         
+        # Start fetching TMDB details
+        tmdb_task = asyncio.create_task(self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token")))
         riven_details = None
-        if riven_id_to_check:
-            riven_details = await self.api.get_item_by_id(riven_media_type, str(riven_id_to_check), self.settings.get("riven_key"))
+
+        if media_type == "movie":
+            # For movies, we can fetch Riven data simultaneously
+            riven_task = asyncio.create_task(self.api.get_item_by_id("movie", str(tmdb_id), self.settings.get("riven_key")))
+            tmdb_resp, riven_details = await asyncio.gather(tmdb_task, riven_task)
+            tmdb_details, error = tmdb_resp
+        else:
+            # For TV, we must wait for TMDB first to get the TVDB ID
+            tmdb_details, error = await tmdb_task
+            if not error and tmdb_details:
+                tvdb_id = tmdb_details.get("external_ids", {}).get("tvdb_id")
+                if tvdb_id:
+                    riven_details = await self.api.get_item_by_id("tv", str(tvdb_id), self.settings.get("riven_key"))
             
         self.stop_spinner()
         
+        if error:
+            self.notify(f"TMDB Error: {error}", severity="error")
+            return
+            
         self.push_screen(
             MediaCardScreen(tmdb_details, riven_details, media_type, self.api, self.settings, self.chafa_available),
             callback=self.handle_modal_result
@@ -1421,41 +1445,48 @@ class RivenTUI(App):
         await self._refresh_current_item_data_and_ui(delay=0)
 
     async def _refresh_current_item_data_and_ui(self, delay: float | None = None) -> None:
-        effective_delay = delay if delay is not None else self.refresh_delay_seconds
         main_content = self.query_one(MainContent)
         tmdb_search_result = main_content.item_data
         if not tmdb_search_result:
             return
+            
         tmdb_id = tmdb_search_result.get("id")
         media_type = tmdb_search_result.get("media_type")
-        if not media_type or not tmdb_id:
-            self.notify("Current item is missing ID or media type for refresh.", severity="error")
-            return
-        await self.start_spinner("Repulling item data...")
-        await asyncio.sleep(effective_delay) 
-        tmdb_details, error = await self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token"))
-        if error:
-            self.notify(f"TMDB Error during repull: {error}", severity="error")
-            main_content.tmdb_details = None 
-            main_content.item_details = None 
-            self.stop_spinner()
-            await self.show_item_actions()
-            return
-        main_content.tmdb_details = tmdb_details
-        # Robust mapping: If not movie, it's a TV/Show category for Riven
-        riven_media_type = "movie" if media_type == "movie" else "tv"
         
-        # Prioritize preserved riven_id, fallback to resolving from TMDB details
-        riven_id_to_check = tmdb_search_result.get("riven_id")
-        if not riven_id_to_check:
-            riven_id_to_check = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
-            
-        if not riven_id_to_check:
-            main_content.item_details = None
+        if not media_type or not tmdb_id:
+            self.notify("Missing ID or media type.", severity="error")
+            return
+
+        await self.start_spinner("Fetching media info...")
+        
+        riven_media_type = "movie" if media_type == "movie" else "tv"
+        riven_id = tmdb_search_result.get("riven_id")
+        
+        tmdb_task = asyncio.create_task(self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token")))
+        riven_details = None
+        
+        if riven_id:
+            # Fetch both at the same time
+            riven_task = asyncio.create_task(self.api.get_item_by_id(riven_media_type, str(riven_id), self.settings.get("riven_key")))
+            tmdb_resp, riven_details = await asyncio.gather(tmdb_task, riven_task)
+            tmdb_details, error = tmdb_resp
         else:
-            main_content.item_details = await self.api.get_item_by_id(riven_media_type, str(riven_id_to_check), self.settings.get("riven_key"))
+            tmdb_details, error = await tmdb_task
+            if not error and tmdb_details:
+                lookup_id = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
+                if lookup_id:
+                    riven_details = await self.api.get_item_by_id(riven_media_type, str(lookup_id), self.settings.get("riven_key"))
+
+        if error:
+            self.notify(f"TMDB Error: {error}", severity="error")
+            self.stop_spinner()
+            return
+
+        main_content.tmdb_details = tmdb_details
+        main_content.item_details = riven_details
+        
         self.stop_spinner() 
-        await self.show_item_actions() 
+        await self.show_item_actions()
 
     async def show_library_items(self, limit: int = 20, page: int = 1, sort: str = "date_desc", item_type: str | None = None, search: str | None = None, states: List[str] | None = None, refresh_cache: bool = False) -> None:
         main_content = self.query_one(MainContent)
@@ -2047,102 +2078,95 @@ class RivenTUI(App):
         self.run_worker(self._run_manual_scrape)
 
     async def _run_manual_scrape(self):
-        main_content = self.query_one(MainContent)
-        if not main_content.tmdb_details:
-            return
-        tmdb_id = main_content.tmdb_details.get("id")
-        riven_item_id = main_content.item_details.get("id") if main_content.item_details else None
-        media_type = main_content.item_data.get("media_type")
-        if not media_type:
-            return
-        tvdb_id_for_scrape = None
-        if media_type == "tv" and not riven_item_id:
-            tvdb_id_for_scrape = main_content.tmdb_details.get("external_ids", {}).get("tvdb_id")
-            if not tvdb_id_for_scrape:
-                self.notify(f"Could not find TVDB ID for {main_content.tmdb_details.get('name')} to scrape.", severity="error")
-                return
-        await self.start_spinner("Discovering streams...")
-        log_screen = ScrapeLogScreen(media_type, tmdb_id, self.settings.get("riven_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape)
-        all_streams = await self.push_screen_wait(log_screen)
-        
-        if not all_streams:
-            # We don't notify here because ScrapeLogScreen or the next block handles it
-            pass
-        else:
-            # In case it returned None from a cancel
-            if not isinstance(all_streams, dict):
-                all_streams = {}
-
-        streams = list(all_streams.values())
-        if not streams:
-            self.notify("No streams found.", severity="warning")
-            return
-        session_data = None
-        while True:
-            selection_screen = StreamSelectionScreen(streams)
-            magnet_link = await self.app.push_screen_wait(selection_screen)
-            if not magnet_link:
-                return
-            await self.start_spinner("Starting scrape session...")
-            current_session_data, error = await self.api.start_scrape_session(media_type, magnet_link, tmdb_id, self.settings.get("riven_key"), riven_item_id, tvdb_id=tvdb_id_for_scrape)
-            self.stop_spinner()
-            if error and "Torrent is not cached" in error:
-                self.notify("Torrent not cached. Please select another.", severity="warning")
-                continue 
-            elif error or not isinstance(current_session_data, dict):
-                self.notify(f"Error starting session: {error or 'Invalid response'}", severity="error")
-                return
-            session_data = current_session_data
-            break
-        session_id = session_data.get("session_id")
-        containers_files = session_data.get("containers", {}).get("files", [])
-        if not session_id or not containers_files:
-            self.notify("No cached files found in session.", severity="error")
-            return
-
-        if media_type == "movie":
-            await self._finalize_movie_scrape(session_id, containers_files)
-        elif media_type == "tv":
-            await self._finalize_tv_scrape(session_id, containers_files)
-
-    async def _finalize_movie_scrape(self, session_id: str, containers_files: List[dict]):
+        """Rebuilt Manual Scrape Flow with Abort Safety."""
         main_content = self.query_one(MainContent)
         riven_key = self.settings.get("riven_key")
         
-        # Select largest file for movie
-        video_file = max(containers_files, key=lambda f: f.get('filesize', 0))
-        file_id_str = str(video_file.get("file_id"))
+        # 1. IDs
+        tmdb_id = main_content.item_data.get("id")
+        media_type = "tv" if main_content.item_data.get("media_type") in ["tv", "show"] else "movie"
+        item_id = main_content.item_details.get("id") if main_content.item_details else main_content.item_data.get("riven_id")
+        tvdb_id = main_content.tmdb_details.get("external_ids", {}).get("tvdb_id") if main_content.tmdb_details else None
+
+        # 2. Open Discovery Modal
+        log_screen = ScrapeLogScreen(media_type, tmdb_id, riven_key, riven_item_id=item_id, tvdb_id=tvdb_id)
+        all_streams = await self.push_screen_wait(log_screen)
         
-        await self.api.parse_torrent_titles([video_file.get('filename')], riven_key)
+        if not all_streams:
+            self.notify("Scrape cancelled or failed.", severity="warning")
+            return
+
+        # 3. Start Session with Abort Logic
+        session_id = None
+        try:
+            streams_list = list(all_streams.values())
+            selection_screen = StreamSelectionScreen(streams_list)
+            magnet_link = await self.push_screen_wait(selection_screen)
+            if not magnet_link: return
+
+            await self.start_spinner("Starting session...")
+            session_data, err = await self.api.start_scrape_session(media_type, magnet_link, tmdb_id, riven_key, riven_item_id=item_id, tvdb_id=tvdb_id)
+            
+            if session_data:
+                session_id = session_data.get("session_id")
+                files = session_data.get("containers", {}).get("files", [])
+                if media_type == "movie":
+                    await self._finalize_movie_scrape(session_id, files)
+                else:
+                    await self._finalize_tv_scrape(session_id, files)
+            else:
+                self.notify(f"Session Error: {err}", severity="error")
         
-        payload_for_select = {
-            file_id_str: {
-                "file_id": video_file.get("file_id"),
-                "filename": video_file.get("filename"),
-                "filesize": video_file.get("filesize"),
-                "download_url": video_file.get("download_url")
+        except Exception as e:
+            self.log_message(f"Scrape Error: {e}")
+            if session_id:
+                # Cleanup: Tell backend to kill the session if we crashed
+                await self.api.scrape_session_action(session_id, "abort", riven_key)
+            self.notify("Scrape flow interrupted. Session aborted.", severity="error")
+        finally:
+            self.stop_spinner()
+        
+    async def _finalize_movie_scrape(self, session_id: str, containers_files: List[dict]):
+        riven_key = self.settings.get("riven_key")
+        
+        # Filter for files that have a download_url (is cached)
+        cached_files = [f for f in containers_files if f.get("download_url")]
+        
+        if not cached_files:
+            self.notify("No cached files found in this torrent.", severity="error")
+            return
+
+        # Pick largest cached file
+        video_file = max(cached_files, key=lambda f: f.get('filesize', 0))
+        file_id = str(video_file.get("file_id") or "1")
+        
+        # STEP 4: select_files (Payload matches Attempt 2 success)
+        payload = {
+            "files": {
+                file_id: {
+                    "file_id": video_file.get("file_id"),
+                    "filename": video_file.get("filename"),
+                    "filesize": video_file.get("filesize")
+                }
             }
         }
         
-        success, response = await self.api.select_scrape_file(session_id, payload_for_select, riven_key)
-        if not success:
-            self.notify(f"Error selecting file: {response}", severity="error")
-            return
-
-        await self.start_spinner("Updating scrape attributes...")
-        await self.api.update_scrape_attributes(session_id, payload_for_select[file_id_str], riven_key)
-        self.stop_spinner()
+        await self.start_spinner("Finalizing selection...")
+        success, err = await self.api.scrape_session_action(session_id, "select_files", riven_key, payload)
         
-        await self.start_spinner("Completing scrape session...")
-        final_success, final_response = await self.api.complete_scrape_session(session_id, riven_key)
-        self.stop_spinner()
-        
-        if final_success:
-            self.notify("Manual scrape initiated successfully!", severity="success")
-            await self._refresh_current_item_data_and_ui(delay=self.refresh_delay_seconds) 
+        if success:
+            # STEP 5: complete
+            success, err = await self.api.scrape_session_action(session_id, "complete", riven_key)
+            self.stop_spinner()
+            if success:
+                self.notify("Manual scrape successful!", severity="success")
+                await self._refresh_current_item_data_and_ui()
+            else:
+                self.notify(f"Completion Error: {err}", severity="error")
         else:
-            self.notify(f"Finalization Error: {final_response}", severity="error")
-
+            self.stop_spinner()
+            self.notify(f"Selection Error: {err}", severity="error")
+            
     async def _finalize_tv_scrape(self, session_id: str, containers_files: List[dict]):
         main_content = self.query_one(MainContent)
         riven_key = self.settings.get("riven_key")

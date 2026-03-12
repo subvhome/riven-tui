@@ -5,15 +5,26 @@ import os
 from typing import List, Optional
 
 class RivenAPI:
-    def __init__(self, be_base_url, timeout=10.0):
+    def __init__(self, be_base_url, fe_base_url, timeout=10.0):
         self.mdblist_api_key = "kgx75hvk95is39a6joe68tgux"
         headers = {
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
             "Accept": "*/*",
             "Referer": f"{be_base_url}/scalar"
         }
-        self.client = httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers=headers)
+        
+        # PERFORMANCE FIX: Increased connection limits to prevent API flooding
+        limits = httpx.Limits(max_keepalive_connections=50, max_connections=200)
+        
+        self.client = httpx.AsyncClient(
+            follow_redirects=True, 
+            timeout=timeout, 
+            headers=headers,
+            limits=limits
+        )
+        
         self.be_base_url = be_base_url
+        self.fe_base_url = fe_base_url
         self.api_base_path = "/api/v1"
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.mdblist_base_url = "https://api.mdblist.com"
@@ -164,54 +175,86 @@ class RivenAPI:
             return (resp.text, None) if resp.status_code == 200 else (None, "Error")
         except: return None, "Error"
 
-    async def scrape_stream(self, media_type: str, tmdb_id: int, riven_key: str, item_id: str = None, tvdb_id: Optional[int] = None):
-        url = f"{self.be_base_url}/api/scrape_stream"
-        params = {"media_type": media_type}
-        if item_id: params["item_id"] = item_id
-        elif media_type == "tv" and tvdb_id: params["tvdb_id"] = str(tvdb_id)
-        else: params["tmdb_id"] = str(tmdb_id)
+    async def login(self, username, password):
+        """Emulates SvelteKit login with mandatory Origin headers to bypass CSRF protection."""
+        base = self.fe_base_url.rstrip('/')
+        url = f"{base}/auth/login?/login"
+        
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/x-www-form-urlencoded",
+            "x-sveltekit-action": "true",
+            "Origin": base,  # CRITICAL: Must match ORIGIN env var in Docker
+            "Referer": f"{base}/auth/login",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        }
+        
+        data = {
+            "username": username,
+            "password": password,
+            "__superform_id": "loginForm"
+        }
+        
         try:
-            async with self.client.stream("GET", url, headers={"x-api-key": riven_key, "Accept": "text/event-stream"}, params=params) as response:
-                if response.status_code != 200: return
-                async for line in response.aiter_lines(): yield line
-        except: yield "error: Connection failed"
+            self.logger.info(f"Attempting FE Login: {url} with Origin: {base}")
+            resp = await self.client.post(url, headers=headers, data=data)
+            
+            # SvelteKit returns cookies in the 'set-cookie' header
+            token = self.client.cookies.get("riven.session_token")
+            if token:
+                self.logger.info("FE Login Successful: Session token acquired.")
+                return True, token
+            
+            return False, f"Status {resp.status_code}. Body: {resp.text[:200]}"
+        except Exception as e:
+            return False, str(e)
 
-    async def start_scrape_session(self, media_type: str, magnet: str, tmdb_id: int, riven_key: str, item_id: str = None, tvdb_id: Optional[int] = None):
-        url = f"{self.be_base_url}{self.api_base_path}/scrape/start_session"
-        params = {"media_type": media_type, "magnet": magnet}
-        if item_id: params["item_id"] = item_id
-        elif media_type == "tv" and tvdb_id: params["tvdb_id"] = str(tvdb_id)
-        else: params["tmdb_id"] = str(tmdb_id)
-        try:
-            resp = await self.client.post(url, headers={"x-api-key": riven_key}, params=params)
-            return (resp.json(), None) if resp.status_code == 200 else (None, resp.text)
-        except Exception as e: return None, str(e)
+    async def scrape_stream(self, media_type: str, tmdb_id: int, riven_key: str, item_id: str = None, tvdb_id: Optional[int] = None, overrides: dict = None):
+        """Consume SSE stream. Yields raw lines for debugging."""
+        import json
+        base = self.fe_base_url.rstrip('/')
+        url = f"{base}/api/scrape_stream"
+        params = {"media_type": media_type, "tmdb_id": str(tmdb_id)}
+        if item_id: params["item_id"] = str(item_id)
+        if tvdb_id: params["tvdb_id"] = str(tvdb_id)
+        if overrides: params["ranking_overrides"] = json.dumps(overrides, separators=(',', ':'))
 
-    async def select_scrape_file(self, session_id: str, file_metadata: dict, riven_key: str):
-        url = f"{self.be_base_url}{self.api_base_path}/scrape/select_files/{session_id}"
+        headers = {"Accept": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive"}
         try:
-            resp = await self.client.post(url, headers={"x-api-key": str(riven_key)}, json=file_metadata)
-            return (resp.status_code == 200), resp.json()
-        except: return False, "Error"
+            async with self.client.stream("GET", url, headers=headers, params=params, timeout=120.0) as response:
+                if response.status_code != 200:
+                    yield f"error: HTTP {response.status_code}. Body: {await response.aread()}"
+                    return
+                async for line in response.aiter_lines():
+                    yield line
+        except Exception as e:
+            yield f"error: {str(e)}"
 
-    async def update_scrape_attributes(self, session_id: str, file_metadata: dict, riven_key: str):
-        url = f"{self.be_base_url}{self.api_base_path}/scrape/update_attributes/{session_id}"
-        try:
-            resp = await self.client.post(url, headers={"x-api-key": str(riven_key)}, json=file_metadata)
-            return (resp.status_code == 200), resp.json()
-        except: return False, "Error"
+    async def start_scrape_session(self, media_type: str, magnet: str, tmdb_id: int, riven_key: str, riven_item_id: str = None, tvdb_id: Optional[int] = None):
+        """Initializes session. Endpoint: /api/v1/scrape/start_session (Requires v1)"""
+        base = self.be_base_url.rstrip('/')
+        url = f"{base}/api/v1/scrape/start_session"
+        
+        params = {
+            "media_type": media_type,
+            "magnet": magnet,
+            "tmdb_id": str(tmdb_id)
+        }
+        if riven_item_id:
+            params["item_id"] = str(riven_item_id)
+        if tvdb_id:
+            params["tvdb_id"] = str(tvdb_id)
 
-    async def complete_scrape_session(self, session_id: str, riven_key: str):
+        headers = {"x-api-key": riven_key}
+        self.logger.info(f"SESSION START: {url} | Params: {params}")
+        
         try:
-            resp = await self.client.post(f"{self.be_base_url}{self.api_base_path}/scrape/complete_session/{session_id}", headers={"x-api-key": str(riven_key)})
-            return (resp.status_code == 200), resp.json()
-        except: return False, "Error"
-
-    async def abort_scrape_session(self, session_id: str, riven_key: str):
-        try:
-            resp = await self.client.post(f"{self.be_base_url}{self.api_base_path}/scrape/abort_session/{session_id}", headers={"x-api-key": str(riven_key)})
-            return (resp.status_code == 200), resp.json()
-        except: return False, "Error"
+            resp = await self.client.post(url, headers=headers, params=params)
+            if resp.status_code == 200:
+                return resp.json(), None
+            return None, f"Status: {resp.status_code}, Body: {resp.text}"
+        except Exception as e:
+            return None, str(e)
 
     async def parse_torrent_titles(self, titles: list, riven_key: str):
         try:
@@ -306,11 +349,23 @@ class RivenAPI:
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
         except: return None, "Error"
 
-    async def get_settings(self, riven_key: str):
+    async def get_settings(self, riven_key: str, use_fe: bool = False):
+        """Fetches settings. If use_fe is True, uses the Frontend port for session priming."""
+        # Determine which port to use. For scraping, we need to prime the FE port (33000).
+        base = self.fe_base_url.rstrip('/') if use_fe else self.be_base_url.rstrip('/')
+        url = f"{base}{self.api_base_path}/settings/get/all"
+        
+        headers = {"x-api-key": str(riven_key or "")}
+        
         try:
-            resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/settings/get/all", headers={"x-api-key": str(riven_key)})
-            return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+            resp = await self.client.get(url, headers=headers, timeout=self.client.timeout)
+            if resp.status_code == 200:
+                return resp.json(), None
+            # Return the actual status code if it's not 200
+            return None, f"HTTP {resp.status_code} from {url}"
+        except Exception as e:
+            # Return the actual technical error (Timeout, Connection Refused, etc.)
+            return None, f"{type(e).__name__}: {str(e)}"
 
     async def update_settings(self, settings_data: dict, riven_key: str):
         try:
@@ -323,3 +378,20 @@ class RivenAPI:
             resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/settings/schema", headers={"x-api-key": str(riven_key)})
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
         except: return None, "Error"
+    
+    async def scrape_session_action(self, session_id: str, action: str, riven_key: str, data: dict = None):
+        """Unified replacement for all scrape session actions."""
+        url = f"{self.be_base_url}{self.api_base_path}/scrape/session/{session_id}"
+        headers = {"x-api-key": str(riven_key or ""), "Content-Type": "application/json"}
+        
+        payload = {"action": action}
+        if data:
+            payload.update(data)
+            
+        try:
+            resp = await self.client.post(url, headers=headers, json=payload)
+            return (resp.status_code == 200), resp.json() if resp.status_code == 200 else resp.text
+        except Exception as e:
+            return False, str(e)
+    
+    
