@@ -16,10 +16,41 @@ echo -e "${BLUE}=========================================="
 echo -e "      🚀 Riven TUI Release Helper"
 echo -e "==========================================${NC}"
 
+# --- NEW: Pre-flight Sync Check ---
+echo -e "${YELLOW}Checking sync status with GitHub...${NC}"
+git fetch origin main
+
+LOCAL=$(git rev-parse @)
+REMOTE=$(git rev-parse @{u})
+BASE=$(git merge-base @ @{u})
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+    echo -e "${GREEN}✓ Local is up-to-date with remote.${NC}"
+elif [ "$LOCAL" = "$BASE" ]; then
+    echo -e "${RED}✗ Remote has changes you don't have. You should pull first.${NC}"
+    echo -en "${BLUE}Action? [p]ull, [f]orce push anyway, [a]bort: ${NC}"
+    read SYNC_CHOICE < /dev/tty
+    case $SYNC_CHOICE in
+        [Pp]* ) git pull origin main ;;
+        [Ff]* ) echo -e "${YELLOW}Proceeding with force-push intent...${NC}"; FORCED=true ;;
+        * ) exit 1 ;;
+    esac
+elif [ "$REMOTE" = "$BASE" ]; then
+    echo -e "${YELLOW}Local is ahead of remote. Ready to push.${NC}"
+else
+    echo -e "${RED}✗ Branches have diverged! (Work exists on both sides)${NC}"
+    echo -en "${BLUE}Action? [p]ull/merge, [f]orce push (OVERWRITE REMOTE), [a]bort: ${NC}"
+    read SYNC_CHOICE < /dev/tty
+    case $SYNC_CHOICE in
+        [Pp]* ) git pull origin main ;;
+        [Ff]* ) echo -e "${YELLOW}Warning: Remote changes will be lost.${NC}"; FORCED=true ;;
+        * ) exit 1 ;;
+    esac
+fi
+# ---------------------------------
+
 # 1. Fetch latest version from GitHub tags
 echo -e "${YELLOW}Fetching latest version from GitHub...${NC}"
-# Use git ls-remote to get tags, sort them naturally, and pick the last one.
-# Tags are expected in 'v1.1.11' format.
 LATEST_TAG=$(git ls-remote --tags origin | grep -o 'v[0-9.]*$' | sort -V | tail -n1 | sed 's/^v//')
 
 if [ -z "$LATEST_TAG" ]; then
@@ -71,7 +102,11 @@ echo -e "${YELLOW}Tagging v$NEW_VERSION...${NC}"
 git tag -a "v$NEW_VERSION" -m "$RELEASE_MSG"
 
 echo -e "${YELLOW}Pushing to GitHub...${NC}"
-git push origin main
+if [ "$FORCED" = true ]; then
+    git push origin main --force
+else
+    git push origin main
+fi
 git push origin --tags
 
 echo -e "${GREEN}=========================================="
