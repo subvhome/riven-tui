@@ -30,6 +30,7 @@ class RivenAPI:
         self.mdblist_base_url = "https://api.mdblist.com"
         self.logger = logging.getLogger("Riven.API")
         self.logger.propagate = True
+        self.chafa_semaphore = asyncio.Semaphore(3)
 
     async def get_mdblist_items(self, list_url_or_id: str):
         # Handle full URL or just the "user/listname" string
@@ -119,7 +120,7 @@ class RivenAPI:
         try:
             resp = await self.client.get(url, headers={"x-api-key": str(riven_key)}, params=params)
             return resp.json() if resp.status_code == 200 else None
-        except: return None
+        except Exception as e: return None
 
     async def add_item(self, media_type: str, id_type: str, item_id: str, riven_key: str):
         url = f"{self.be_base_url}{self.api_base_path}/items/add"
@@ -134,7 +135,7 @@ class RivenAPI:
         try:
             resp = await self.client.post(url, headers={"x-api-key": str(riven_key)}, json=data)
             return (resp.status_code == 200), resp.json()
-        except: return False, "Error"
+        except Exception as e: return False, str(e)
 
     async def delete_item(self, item_id: int, riven_key: str):
         return await self.bulk_action("remove", [str(item_id)], riven_key)
@@ -161,19 +162,19 @@ class RivenAPI:
         try:
             resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/logs", headers={"x-api-key": str(riven_key)})
             return (resp.json().get("logs", []), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def upload_logs(self, riven_key: str):
         try:
             resp = await self.client.post(f"{self.be_base_url}{self.api_base_path}/upload_logs", headers={"x-api-key": str(riven_key)})
             return (resp.json().get("url"), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_logs_from_url(self, url: str):
         try:
             resp = await self.client.get(url)
             return (resp.text, None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def login(self, username, password):
         """Emulates SvelteKit login with mandatory Origin headers to bypass CSRF protection."""
@@ -260,25 +261,28 @@ class RivenAPI:
         try:
             resp = await self.client.post(f"{self.be_base_url}{self.api_base_path}/scrape/parse", headers={"x-api-key": str(riven_key)}, json=titles)
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_poster_chafa(self, poster_url: str, width: int = 80, height: Optional[int] = None):
-        try:
-            async with self.client.stream("GET", poster_url) as response:
-                if response.status_code != 200: return None, "Error"
-                size = f"{width}x{height}" if height else f"{width}x"
-                env = os.environ.copy()
-                env["TERM"] = "xterm-256color"
-                process = await asyncio.create_subprocess_exec(
-                    "chafa", "--format", "symbols", "--size", size, "-",
-                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env
-                )
-                async for chunk in response.aiter_bytes(): process.stdin.write(chunk)
-                await process.stdin.drain()
-                process.stdin.close()
-                stdout, _ = await process.communicate()
-                return stdout.decode(), None
-        except Exception as e: return None, str(e)
+        # NEW: Put the whole process inside the semaphore block
+        async with self.chafa_semaphore:
+            try:
+                async with self.client.stream("GET", poster_url) as response:
+                    if response.status_code != 200: return None, "Error"
+                    size = f"{width}x{height}" if height else f"{width}x"
+                    env = os.environ.copy()
+                    env["TERM"] = "xterm-256color"
+                    process = await asyncio.create_subprocess_exec(
+                        "chafa", "--format", "symbols", "--size", size, "-",
+                        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env
+                    )
+                    async for chunk in response.aiter_bytes(): process.stdin.write(chunk)
+                    await process.stdin.drain()
+                    process.stdin.close()
+                    stdout, _ = await process.communicate()
+                    return stdout.decode(), None
+            except Exception as e: 
+                return None, str(e)
 
     async def search_tmdb(self, query: str, token: str):
         try:
@@ -293,7 +297,7 @@ class RivenAPI:
         try:
             resp = await self.client.get(f"{self.tmdb_base_url}/{media_type}/{tmdb_id}", headers={"Authorization": f"Bearer {token}"}, params={"append_to_response": "external_ids"})
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def find_tmdb_id(self, external_id: str, source: str, token: str):
         url = f"{self.tmdb_base_url}/find/{external_id}"
@@ -304,19 +308,19 @@ class RivenAPI:
                 for key in ["movie_results", "tv_results"]:
                     if data.get(key): return data[key][0].get("id"), None
             return None, "Not found"
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_tmdb_trending(self, token: str):
         try:
             resp = await self.client.get(f"{self.tmdb_base_url}/trending/all/day", headers={"Authorization": f"Bearer {token}"})
             return (resp.json().get("results", []), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_stats(self, riven_key: str):
         try:
             resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/stats", headers={"x-api-key": str(riven_key)})
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_tmdb_genres(self, token: str):
         genres = {}
@@ -326,19 +330,19 @@ class RivenAPI:
                 if r.status_code == 200:
                     for g in r.json().get("genres", []): genres[g["id"]] = g["name"]
             return genres, None
-        except: return {}, "Error"
+        except Exception as e: return {}, str(e)
 
     async def get_services(self, riven_key: str):
         try:
             resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/services", headers={"x-api-key": str(riven_key)})
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_health(self, riven_key: str):
         try:
             resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/health", headers={"x-api-key": str(riven_key)})
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def shutdown(self):
         await self.client.aclose()
@@ -347,7 +351,7 @@ class RivenAPI:
         try:
             resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/calendar", headers={"x-api-key": str(riven_key)})
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_settings(self, riven_key: str, use_fe: bool = False):
         """Fetches settings. If use_fe is True, uses the Frontend port for session priming."""
@@ -371,13 +375,13 @@ class RivenAPI:
         try:
             resp = await self.client.post(f"{self.be_base_url}{self.api_base_path}/settings/set/all", headers={"x-api-key": str(riven_key)}, json=settings_data)
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
 
     async def get_schema(self, riven_key: str):
         try:
             resp = await self.client.get(f"{self.be_base_url}{self.api_base_path}/settings/schema", headers={"x-api-key": str(riven_key)})
             return (resp.json(), None) if resp.status_code == 200 else (None, "Error")
-        except: return None, "Error"
+        except Exception as e: return None, str(e)
     
     async def scrape_session_action(self, session_id: str, action: str, riven_key: str, data: dict = None):
         """Unified replacement for all scrape session actions."""

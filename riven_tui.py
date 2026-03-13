@@ -6,6 +6,7 @@ import math
 import calendar
 from datetime import datetime
 from typing import List, Optional, Literal, Dict
+import time
 import logging
 from logging.handlers import RotatingFileHandler
 import shutil
@@ -1152,23 +1153,22 @@ class RivenTUI(App):
         await self._open_media_card(tmdb_id, media_type)
 
     async def _open_media_card(self, tmdb_id: int, media_type: str):
+        self.tui_logger.info(f"[MEDIA CARD FLOW] 1. Initiating _open_media_card for tmdb_id={tmdb_id}, media_type={media_type}")
         if not tmdb_id:
             self.notify("Cannot open item: missing TMDB ID", severity="error")
             return
 
         await self.start_spinner("Fetching details...")
         
-        # Start fetching TMDB details
+        api_start = time.time()
         tmdb_task = asyncio.create_task(self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token")))
         riven_details = None
 
         if media_type == "movie":
-            # For movies, we can fetch Riven data simultaneously
             riven_task = asyncio.create_task(self.api.get_item_by_id("movie", str(tmdb_id), self.settings.get("riven_key")))
             tmdb_resp, riven_details = await asyncio.gather(tmdb_task, riven_task)
             tmdb_details, error = tmdb_resp
         else:
-            # For TV, we must wait for TMDB first to get the TVDB ID
             tmdb_details, error = await tmdb_task
             if not error and tmdb_details:
                 tvdb_id = tmdb_details.get("external_ids", {}).get("tvdb_id")
@@ -1176,11 +1176,13 @@ class RivenTUI(App):
                     riven_details = await self.api.get_item_by_id("tv", str(tvdb_id), self.settings.get("riven_key"))
             
         self.stop_spinner()
+        self.tui_logger.info(f"[MEDIA CARD FLOW] 2. API fetching completed in {time.time() - api_start:.3f}s")
         
         if error:
             self.notify(f"TMDB Error: {error}", severity="error")
             return
             
+        self.tui_logger.info("[MEDIA CARD FLOW] 3. Pushing MediaCardScreen to app...")
         self.push_screen(
             MediaCardScreen(tmdb_details, riven_details, media_type, self.api, self.settings, self.chafa_available),
             callback=self.handle_modal_result

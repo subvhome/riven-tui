@@ -1,5 +1,8 @@
 import json
 import asyncio
+import os
+import sys
+import time
 from typing import List, Optional
 from textual import on
 from textual.app import ComposeResult
@@ -149,6 +152,7 @@ class MediaCardScreen(ModalScreen):
             yield Button("Back to Media", id="btn-back-from-json", variant="primary", classes="hidden")
 
     async def on_mount(self):
+        self.app.log_message("[MEDIA CARD FLOW] 4. MediaCardScreen.on_mount started.")
         container = self.query_one("#modal-media-container")
         tmdb_data = self.tmdb_data
         riven_data = self.riven_data
@@ -160,7 +164,7 @@ class MediaCardScreen(ModalScreen):
         runtime_movie = tmdb_data.get('runtime', 0)
         episode_run_time = None
         if self.media_type == "tv":
-            episode_run_time_list = tmdb_data.get('episode_run_time', [])
+            episode_run_time_list = tmdb_data.get('episode_run_time',[])
             if episode_run_time_list:
                 episode_run_time = f"{episode_run_time_list[0]} mins"
 
@@ -168,7 +172,7 @@ class MediaCardScreen(ModalScreen):
         description = tmdb_data.get('overview')
         status = tmdb_data.get('status')
         
-        languages_spoken_list = [lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
+        languages_spoken_list =[lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
         if not languages_spoken_list and tmdb_data.get('original_language'):
             languages_spoken_list.append(tmdb_data.get('original_language').upper())
         languages_spoken = " - ".join(languages_spoken_list)
@@ -208,7 +212,7 @@ class MediaCardScreen(ModalScreen):
             await info_col.mount(Static(description, classes="media-overview"))
 
         # 2. Populate Action Column (Right)
-        action_buttons = []
+        action_buttons =[]
         if riven_data:
             action_buttons.extend([
                 Button("Delete", id="btn-delete-modal", variant="error"),
@@ -216,7 +220,6 @@ class MediaCardScreen(ModalScreen):
                 Button("Retry", id="btn-retry-modal", variant="primary"),
             ])
         
-        # ENABLED: Changed disabled=True to disabled=False
         action_buttons.append(Button("Manual Scrape", id="btn-scrape-modal", variant="success", disabled=False))
         
         if not riven_data:
@@ -225,40 +228,48 @@ class MediaCardScreen(ModalScreen):
         action_buttons.append(Button("Back", id="btn-back-to-dashboard", variant="primary"))
         action_buttons.append(Button("JSON", id="btn-print-json-modal"))
         
-        # Use a Horizontal bar with an ID that is docked in CSS
         await action_col.mount(Horizontal(*action_buttons, id="modal-button-row", classes="media-button-bar"))
 
+        self.app.log_message("[MEDIA CARD FLOW] 5. UI Elements mounted. Setting RefreshPoster timer.")
         if self.chafa_available and tmdb_data.get("poster_path"):
             await action_col.mount(Static(id="poster-display-modal"))
             self.last_chafa_width = None
             self.set_timer(0.1, lambda: self.post_message(RefreshPoster()))
 
+        self.app.log_message("[MEDIA CARD FLOW] 6. MediaCardScreen.on_mount finished.")
+
     async def on_resize(self, event) -> None:
+        self.app.log_message(f"[MEDIA CARD FLOW] Resize Event Triggered: {event.size}")
         if self.chafa_available and self.tmdb_data.get("poster_path"):
             if self.post_message_debounce_timer:
                 self.post_message_debounce_timer.stop()
             self.post_message_debounce_timer = self.set_timer(0.2, lambda: self.post_message(RefreshPoster()))
 
     @on(RefreshPoster)
-
     async def on_refresh_poster(self, message: RefreshPoster) -> None:
+        self.app.log_message("[MEDIA CARD FLOW] 7. RefreshPoster message received. Starting worker.")
+        # We removed the cancellation kill-switch because it was assassinating the worker!
+        self.run_worker(self._perform_poster_load())
+
+    async def _perform_poster_load(self) -> None:
+        start_time = time.time()
+        self.app.log_message("[MEDIA CARD FLOW] 8. _perform_poster_load worker started.")
+        
         try:
             poster_widget = self.query_one("#poster-display-modal", Static)
         except NoMatches:
+            self.app.log_message("[MEDIA CARD FLOW] ERROR: Could not find poster-display-modal widget.")
             return
 
-        # Try to measure the actual action column if it exists (most accurate)
         target_width = None
         try:
             action_col = self.query_one(".media-action-column")
             if action_col.size.width > 0:
-                # Subtract padding (2) + border (1) + safety (3) = 6
                 target_width = max(10, action_col.size.width - 6)
         except NoMatches:
             pass
 
         if target_width is None:
-            # Fallback calculation
             container = self.query_one("#modal-media-container")
             target_width = max(10, int(container.size.width * 0.75) - 14)
 
@@ -266,14 +277,34 @@ class MediaCardScreen(ModalScreen):
         if chafa_max_width > 0:
             target_width = min(target_width, chafa_max_width)
 
-        target_height = int(target_width * 0.75)
+        self.app.log_message(f"[MEDIA CARD FLOW] 9. Width calculated: {target_width}. Fetching chafa...")
 
+        # The eager caching safely prevents the double execution bug
         if self.last_chafa_width is None or abs(target_width - self.last_chafa_width) > 2:
-            poster_url = f"https://image.tmdb.org/t/p/w1280{self.tmdb_data['poster_path']}"
+            
+            # Lock in the width so subsequent overlapping workers ignore it
+            self.last_chafa_width = target_width 
+            target_height = int(target_width * 0.75)
+            
+            chafa_start = time.time()
+            poster_url = f"https://image.tmdb.org/t/p/w500{self.tmdb_data['poster_path']}"
             poster_art, error = await self.api.get_poster_chafa(poster_url, width=target_width, height=target_height)
-            if not error:
-                poster_widget.update(Text.from_ansi(poster_art))
-                self.last_chafa_width = target_width
+            self.app.log_message(f"[MEDIA CARD FLOW] 10. Chafa fetch completed in {time.time() - chafa_start:.3f}s. Error: {error}")
+            
+            if not error and poster_art:
+                self.app.log_message("[MEDIA CARD FLOW] 11. Converting ANSI to Rich Text (in background thread)...")
+                ansi_start = time.time()
+                
+                # Background parsing with no_wrap ensures the UI layout engine doesn't freeze
+                rich_text = await asyncio.to_thread(Text.from_ansi, poster_art, no_wrap=True)
+                self.app.log_message(f"[MEDIA CARD FLOW] 12. ANSI to Rich conversion took {time.time() - ansi_start:.3f}s")
+                
+                self.app.log_message("[MEDIA CARD FLOW] 13. Updating widget...")
+                update_start = time.time()
+                poster_widget.update(rich_text)
+                self.app.log_message(f"[MEDIA CARD FLOW] 14. Widget update call finished in {time.time() - update_start:.3f}s")
+                
+        self.app.log_message(f"[MEDIA CARD FLOW] 15. _perform_poster_load finished entirely in {time.time() - start_time:.3f}s")
 
     @on(Button.Pressed, "#btn-print-json-modal")
     async def handle_print_json(self):

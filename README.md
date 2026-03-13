@@ -25,7 +25,7 @@ Riven TUI turns your shell into a dedicated media kiosk, allowing you to discove
 Automatically installs system dependencies (`chafa`, `git`, `python3-venv`), sets up the virtual environment, and configures a terminal alias.
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/subvhome/riven-tui/main/xinstall.sh | sh
 ```
 
 ### Manual Setup

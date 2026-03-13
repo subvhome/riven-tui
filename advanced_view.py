@@ -4,6 +4,8 @@ from textual.widgets import Static, Label, Button, Input, Log, ListView, ListIte
 from textual import on
 from typing import List, Dict
 import asyncio
+import os
+import json
 from modals import ConfirmationScreen
 
 from textual.reactive import reactive
@@ -72,8 +74,6 @@ class AdvancedView(Vertical):
 
     async def perform_import(self) -> None:
         status = self.query_one("#export-status", Static)
-        import os
-        import json
         
         # Use absolute path from main app
         base_dir = getattr(self.app, "BASE_DIR", os.getcwd())
@@ -220,8 +220,6 @@ class AdvancedView(Vertical):
         total_pages = (total + limit - 1) // limit
         
         # FIXED: Use absolute path relative to the script location
-        import os
-        import json
         base_dir = os.path.dirname(os.path.abspath(__file__))
         export_file = os.path.join(base_dir, "riven_export.json")
         
@@ -482,8 +480,6 @@ class AdvancedView(Vertical):
 
         # 2. Log Unsupported to File
         if unsupported_items:
-            import json
-            import os
             # Use absolute LOGS_DIR from main app
             if hasattr(self.app, "BASE_DIR"):
                  log_file = os.path.join(self.app.BASE_DIR, "logs", "unsupported_bulk.json")

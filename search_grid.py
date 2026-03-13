@@ -23,8 +23,9 @@ class SearchGridTile(Vertical):
         self._hover_timer = None
         self._is_active = False
         self._loading_poster = False
-        # Treat the tile as one block so labels don't interrupt mouse events
         self.can_focus_children = False
+        # NEW: We need a variable to track the active background download
+        self._render_worker = None
 
     def compose(self) -> ComposeResult:
         title = self.item_data.get('title') or self.item_data.get('name') or "Unknown"
@@ -59,18 +60,22 @@ class SearchGridTile(Vertical):
         self._hover_timer = self.set_timer(HOVER_DELAY, self._load_poster)
 
     def on_leave(self, event: events.Leave) -> None:
-        # Check if mouse is actually outside the boundaries
-        # This is the "secret sauce" to stop the flickering loop
         if self.app.mouse_position:
             mx, my = self.app.mouse_position
             if self.region.contains(mx, my):
-                return # Still inside, ignore the fake "leave" event
+                return
         
         self._is_active = False
         self._loading_poster = False
         self.remove_class("-mouse-over")
         self.remove_class("-show-poster")
-        self._reset_view() 
+        
+        # THE FIX: Textual workers use .is_running
+        if self._render_worker and self._render_worker.is_running:
+            self._render_worker.cancel()
+            self._render_worker = None
+            
+        self._reset_view()
         
     def on_focus(self, event: events.Focus) -> None:
         self._is_active = True
@@ -92,7 +97,9 @@ class SearchGridTile(Vertical):
         if not self._is_active or not self.item_data.get("poster_path"): return
         self.remove_class("-hover-loading")
         poster_url = f"https://image.tmdb.org/t/p/w500{self.item_data['poster_path']}"
-        self.run_worker(self._fetch_and_render(poster_url, 28, 18))
+        
+        # NEW: We save the worker task to the variable so we can control it
+        self._render_worker = self.run_worker(self._fetch_and_render(poster_url, 28, 18))
 
     async def _fetch_and_render(self, url: str, width: int, height: int):
         poster_art, error = await self.api.get_poster_chafa(url, width=width, height=height)
