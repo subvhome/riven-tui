@@ -1113,107 +1113,9 @@ class RivenTUI(App):
                 await container.mount(Static(Text.from_ansi(poster_art), id="poster-display"))
                 main_content.last_chafa_width = chafa_target_width
 
-    async def show_item_actions(self, target_poster_width: Optional[int] = None):
-        main_content = self.query_one(MainContent)
-        main_content.add_class("media-details-active")
-        container = main_content.query_one("#main-content-container")
-
-        # FIX: Restore visibility so the card actually shows up!
-        container.remove_class("hidden")
-        main_content.query_one("#library-list").add_class("hidden")
-        main_content.query_one("#main-content-json-container").add_class("hidden")
-        main_content.query_one("#btn-back-to-actions").add_class("hidden")
-
-        await container.query("*").remove()
-        main_content.last_chafa_width = None 
-        tmdb_data = main_content.tmdb_details
-        riven_data = main_content.item_details
-        search_item_data = main_content.item_data 
-        if not tmdb_data:
-            return
-
-        # Prepare Data
-        title = tmdb_data.get('title') or tmdb_data.get('name', 'N/A')
-        year = (tmdb_data.get('release_date') or tmdb_data.get('first_air_date', 'N/A'))[:4]
-        runtime_movie = tmdb_data.get('runtime', 0) 
-        episode_run_time = None
-        if search_item_data and search_item_data.get("media_type") == "tv":
-            episode_run_time_list = tmdb_data.get('episode_run_time',[])
-            if episode_run_time_list:
-                episode_run_time = f"{episode_run_time_list[0]} mins" 
-        
-        languages_spoken_list =[lang.get('iso_639_1').upper() for lang in tmdb_data.get('spoken_languages', []) if lang.get('iso_639_1')]
-        if not languages_spoken_list and tmdb_data.get('original_language'):
-            languages_spoken_list.append(tmdb_data.get('original_language').upper())
-        languages_spoken = " - ".join(languages_spoken_list)
-        
-        status = tmdb_data.get('status')
-        genres = " - ".join([genre.get('name') for genre in tmdb_data.get('genres', []) if genre.get('name')])
-        description = tmdb_data.get('overview')
-        tagline = tmdb_data.get('tagline')
-
-        # Create Split Layout
-        split_layout = Horizontal(classes="media-detail-layout")
-        await container.mount(split_layout)
-        
-        info_col = Vertical(classes="media-info-column")
-        action_col = Vertical(classes="media-action-column")
-        await split_layout.mount(info_col)
-        await split_layout.mount(action_col)
-
-        # 1. Populate Info Column (Left)
-        await info_col.mount(Static(f"[bold]{title}[/bold]", classes="media-title"))
-        if tagline:
-            await info_col.mount(Static(f"[italic]{tagline}[/italic]", classes="media-tagline"))
-        
-        metadata_items = [year]
-        if search_item_data and search_item_data.get("media_type") == "movie" and runtime_movie:
-            metadata_items.append(f"{runtime_movie} mins")
-        elif search_item_data and search_item_data.get("media_type") == "tv" and episode_run_time:
-            metadata_items.append(episode_run_time)
-        if languages_spoken:
-            metadata_items.append(languages_spoken)
-        if status:
-            metadata_items.append(status)
-        if riven_data:
-            metadata_items.append(f"[bold]{riven_data.get('state', 'Unknown').title()}[/]")
-            
-        if metadata_items:
-            await info_col.mount(Static(" • ".join(filter(None, metadata_items)), classes="media-metadata"))
-        
-        if genres:
-            await info_col.mount(Static(genres, classes="media-genres"))
-        if description:
-            await info_col.mount(Static(description, classes="media-overview"))
-
-        # 2. Populate Action Column (Right)
-        action_buttons =[]
-        if riven_data:
-            action_buttons.extend([
-                Button("Delete", id="btn-delete", variant="error"),
-                Button("Reset", id="btn-reset", variant="warning"),
-                Button("Retry", id="btn-retry", variant="primary"),
-            ])
-        
-        action_buttons.append(Button("Manual Scrape", id="btn-manual-scrape", variant="success", disabled=False))
-        if not riven_data:
-            action_buttons.append(Button("Request", id="btn-add", variant="success"))
-        
-        action_buttons.append(Button("Back", id="btn-back-to-library", variant="primary"))
-        action_buttons.append(Button("JSON", id="btn-print-json"))
-        
-        await action_col.mount(Horizontal(*action_buttons, classes="media-button-bar"))
-        
-        # 3. Mount Empty Poster Placeholder
-        await action_col.mount(Static(id="poster-display"))
-        
-        # 4. Trigger Poster Load in Background
-        self.set_timer(0.1, lambda: self.post_message(RefreshPoster()))
-
     @on(CalendarItemSelected)
     async def on_calendar_item_selected(self, message: CalendarItemSelected) -> None:
         self.navigation_source = "calendar"
-        main_content = self.query_one(MainContent)
         cal_item = message.item_data
         
         media_type = cal_item.get("item_type")
@@ -1223,9 +1125,8 @@ class RivenTUI(App):
         tmdb_id = cal_item.get("tmdb_id")
         tvdb_id = cal_item.get("tvdb_id") or cal_item.get("tvdbId")
 
-        # If it's a TV item, ensure we have the SHOW's TMDB ID.
+        # Resolve Show TMDB ID via TVDB ID if missing
         if media_type == "tv" and tvdb_id:
-            # Resolve Show TMDB ID via TVDB ID
             found_id, error = await self.api.find_tmdb_id(str(tvdb_id), "tvdb_id", self.settings.get("tmdb_bearer_token"))
             if found_id:
                 tmdb_id = found_id
@@ -1234,13 +1135,8 @@ class RivenTUI(App):
             self.notify("Cannot open item: missing TMDB ID or type", severity="error")
             return
 
-        main_content.item_data = {
-            "id": tmdb_id,
-            "media_type": media_type,
-            "title": cal_item.get("title") or cal_item.get("show_title")
-        }
-        
-        await self._refresh_current_item_data_and_ui(delay=0)
+        # Send it directly to the fast popup modal
+        await self._open_media_card(tmdb_id, media_type)
 
     @on(SearchGridTile.Selected)
     async def on_search_grid_tile_selected(self, message: SearchGridTile.Selected) -> None:
@@ -1430,63 +1326,24 @@ class RivenTUI(App):
     @on(ListView.Selected, "#sidebar-list")
     async def on_list_view_selected(self, event: ListView.Selected) -> None: 
         self.navigation_source = "search"
-        main_content = self.query_one(MainContent)
         selected_item_label = event.item.name
+        
         if selected_item_label == "Logs":
             await self.show_initial_logs()
             return
         if selected_item_label == "Settings":
             self.app_state = "settings"
             return
+            
         if not (hasattr(event.item, "item_data") and event.item.item_data):
             return
-        tmdb_search_result = event.item.item_data
-        main_content.item_data = tmdb_search_result
-        await self._refresh_current_item_data_and_ui(delay=0)
-
-    async def _refresh_current_item_data_and_ui(self, delay: float | None = None) -> None:
-        main_content = self.query_one(MainContent)
-        tmdb_search_result = main_content.item_data
-        if not tmdb_search_result:
-            return
             
+        tmdb_search_result = event.item.item_data
         tmdb_id = tmdb_search_result.get("id")
-        media_type = tmdb_search_result.get("media_type")
+        media_type = tmdb_search_result.get("media_type", "movie")
         
-        if not media_type or not tmdb_id:
-            self.notify("Missing ID or media type.", severity="error")
-            return
-
-        await self.start_spinner("Fetching media info...")
-        
-        riven_media_type = "movie" if media_type == "movie" else "tv"
-        riven_id = tmdb_search_result.get("riven_id")
-        
-        tmdb_task = asyncio.create_task(self.api.get_tmdb_details(media_type, tmdb_id, self.settings.get("tmdb_bearer_token")))
-        riven_details = None
-        
-        if riven_id:
-            # Fetch both at the same time
-            riven_task = asyncio.create_task(self.api.get_item_by_id(riven_media_type, str(riven_id), self.settings.get("riven_key")))
-            tmdb_resp, riven_details = await asyncio.gather(tmdb_task, riven_task)
-            tmdb_details, error = tmdb_resp
-        else:
-            tmdb_details, error = await tmdb_task
-            if not error and tmdb_details:
-                lookup_id = tmdb_details.get("external_ids", {}).get("tvdb_id") if media_type == "tv" else tmdb_id
-                if lookup_id:
-                    riven_details = await self.api.get_item_by_id(riven_media_type, str(lookup_id), self.settings.get("riven_key"))
-
-        if error:
-            self.notify(f"TMDB Error: {error}", severity="error")
-            self.stop_spinner()
-            return
-
-        main_content.tmdb_details = tmdb_details
-        main_content.item_details = riven_details
-        
-        self.stop_spinner() 
-        await self.show_item_actions()
+        # Send it directly to the fast popup modal
+        await self._open_media_card(tmdb_id, media_type)
 
     async def show_library_items(self, limit: int = 20, page: int = 1, sort: str = "date_desc", item_type: str | None = None, search: str | None = None, states: List[str] | None = None, refresh_cache: bool = False) -> None:
         main_content = self.query_one(MainContent)
@@ -1646,7 +1503,11 @@ class RivenTUI(App):
     async def on_library_item_clicked(self, event: ListView.Selected) -> None: 
         self.navigation_source = "library"
         item_data = event.item.item_data
-        media_type = item_data.get("type")
+        
+        # Determine media type (Riven uses 'show', TMDB uses 'tv')
+        media_type = item_data.get("type", "movie")
+        if media_type == "show": 
+            media_type = "tv"
         
         tmdb_id = await self.api.resolve_tmdb_id(item_data, self.settings.get("tmdb_bearer_token"))
         
@@ -1654,13 +1515,8 @@ class RivenTUI(App):
             self.notify(f"No TMDB ID found for '{item_data.get('title')}'. Cannot fetch details.", severity="warning")
             return
             
-        main_content = self.query_one(MainContent)
-        main_content.item_data = {
-            "id": tmdb_id,
-            "media_type": "movie" if media_type == "movie" else "tv",
-            "riven_id": item_data.get("lookup_id") or item_data.get("riven_id") or item_data.get("id")
-        }
-        await self._refresh_current_item_data_and_ui(delay=0)
+        # Send it directly to the fast popup modal
+        await self._open_media_card(tmdb_id, media_type)
 
     @on(Button.Pressed, "#btn-back-to-library")
     async def handle_back_to_library(self):
